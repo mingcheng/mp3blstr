@@ -1,0 +1,450 @@
+// Package app implements mp3blaster's behaviour independently of the
+// terminal toolkit: program modes, the command set, popups, the playlist
+// window, the file manager and the help screen. The ui package renders this
+// state and feeds key presses and mouse clicks into it.
+package app
+
+import (
+	_ "embed"
+	"fmt"
+	"log/slog"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/mingcheng/mp3blaster/internal/audio"
+	"github.com/mingcheng/mp3blaster/internal/config"
+	"github.com/mingcheng/mp3blaster/internal/filemanager"
+	"github.com/mingcheng/mp3blaster/internal/keys"
+	"github.com/mingcheng/mp3blaster/internal/listview"
+	"github.com/mingcheng/mp3blaster/internal/media"
+	"github.com/mingcheng/mp3blaster/internal/playback"
+	"github.com/mingcheng/mp3blaster/internal/playlist"
+)
+
+//go:embed help.txt
+var helpText string
+
+// View is implemented by the user interface.
+type View interface {
+	Post(func()) // run f on the UI goroutine
+	Beep()
+	Sync() // redraw the whole screen (^L)
+	Quit()
+}
+
+// InputMode tells how key presses are interpreted.
+type InputMode int
+
+// Input modes.
+const (
+	InputDefault InputMode = iota
+	InputSearch
+	InputText
+	InputConfirm
+	InputTask
+)
+
+// Message is the text in the message line at the bottom of the screen.
+type Message struct {
+	Text  string
+	Error bool
+}
+
+// Popup is a dialog asking for a line of text, or, when Confirm is set, a
+// yes/no question (Editor is nil then).
+type Popup struct {
+	Labels  []string
+	Editor  *LineEditor
+	Confirm bool
+	submit  func(string)
+	onYes   func()
+}
+
+// RowKind tells the renderer how to colour a line of the main window.
+type RowKind int
+
+// Row kinds.
+const (
+	RowPlain RowKind = iota
+	RowSong
+	RowGroup
+	RowParent
+	RowDir
+	RowPlaylist
+	RowOther
+)
+
+// Row is a line of the main window.
+type Row struct {
+	Text    string
+	Kind    RowKind
+	Marked  bool
+	Playing bool
+}
+
+type groupView struct {
+	state   listview.State
+	display int
+}
+
+// App is the application state.
+type App struct {
+	Opts    *config.Options
+	Keys    *keys.Table
+	Matcher *media.Matcher
+	Mixer   *audio.Mixer // nil when the mixer is disabled
+	Player  *playback.Controller
+
+	Root *playlist.Group
+	Cur  *playlist.Group
+
+	Mode  keys.Mode
+	Input InputMode
+	Popup *Popup
+	Task  *Task // running background task, shown as a progress dialog
+	Msg   Message
+
+	// HelpBar is the scroll state of the key overview at the top.
+	HelpBar listview.State
+
+	views map[*playlist.Group]*groupView
+
+	fm        *filemanager.Manager
+	fmView    listview.State
+	fmDisplay int
+	fmDir     string
+	startDir  string   // fmDir at start; LastDir is saved when it changed
+	pending   []string // files selected in other directories
+	captured  bool     // CaptureState ran
+
+	help     []string
+	helpView listview.State
+
+	search    string
+	searchGen int
+
+	statusFile string
+	statusSig  string
+	mainWidth  int
+
+	view View
+	log  *slog.Logger
+}
+
+// New creates the application. backend opens songs for the player.
+func New(opts *config.Options, km *keys.Table, matcher *media.Matcher, mixer *audio.Mixer,
+	backend playback.Backend, view View, startDir, statusFile string, log *slog.Logger) *App {
+	root := playlist.NewGroup("[Default]")
+	a := &App{
+		Opts:       opts,
+		Keys:       km,
+		Matcher:    matcher,
+		Mixer:      mixer,
+		Root:       root,
+		Cur:        root,
+		Mode:       keys.ModeNormal,
+		views:      map[*playlist.Group]*groupView{},
+		fmDir:      startDir,
+		startDir:   startDir,
+		statusFile: statusFile,
+		view:       view,
+		log:        log,
+		help:       append(strings.Split(strings.TrimRight(helpText, "\n"), "\n"), keyReference(km)...),
+	}
+	a.HelpBar.Rows = 4
+	a.Player = playback.New(root, backend, view.Post, (*listener)(a))
+	a.Player.Mode = opts.PlayMode
+	a.Player.Repeat = opts.Repeat
+	a.Player.SkipSeconds = opts.SkipSeconds
+	a.SetMessage("Press '?' to get help on available commands")
+	return a
+}
+
+// --- playback listener ------------------------------------------------------
+
+type listener App
+
+func (l *listener) Changed()           { (*App)(l).playerChanged() }
+func (l *listener) Warning(m string)   { (*App)(l).Warning(m) }
+func (l *listener) Message(m string)   { (*App)(l).SetMessage(m) }
+func (l *listener) ClearMessage()      { (*App)(l).Msg = Message{} }
+func (l *listener) EndOfPlaylistQuit() { (*App)(l).Quit() }
+func (l *listener) CurrentGroup() *playlist.Group {
+	return (*App)(l).Cur
+}
+
+// SongStarted shows the album and comment of the new song in the message
+// line, like set_song_info does.
+func (l *listener) SongStarted(info media.SongInfo) {
+	album, comment := info.Album, info.Comment
+	if album == "" {
+		album = "<Unknown Album>"
+	}
+	if comment == "" {
+		comment = "no comments"
+	}
+	(*App)(l).SetMessage(album + " (" + comment + ")")
+}
+
+func (a *App) playerChanged() {
+	if a.statusFile == "" {
+		return
+	}
+	path, _, _ := a.Player.SongInfo()
+	sig := fmt.Sprintf("%s\x00%s\x00%d\x00%v", path, a.Player.NextSongName(), a.Player.Status(), a.Player.Paused())
+	if sig == a.statusSig {
+		return
+	}
+	a.statusSig = sig
+	if err := a.Player.WriteStatusFile(a.statusFile); err != nil && a.log != nil {
+		a.log.Debug("status file", "err", err)
+	}
+}
+
+// --- messages -----------------------------------------------------------------
+
+// SetMessage shows txt in the message line.
+func (a *App) SetMessage(txt string) { a.Msg = Message{Text: txt} }
+
+// Warning shows txt as an error in the message line.
+func (a *App) Warning(txt string) { a.Msg = Message{Text: txt, Error: true} }
+
+// Quit stops playback and leaves the program.
+func (a *App) Quit() {
+	a.endTask()
+	a.CaptureState()
+	a.Player.Shutdown()
+	a.view.Quit()
+}
+
+// CaptureState copies the state that is remembered between sessions into
+// Opts: the file manager directory, the song being played and its position,
+// the mixer, repeat and the play mode. It must run before playback is shut
+// down; later calls do nothing.
+func (a *App) CaptureState() {
+	if a.captured {
+		return
+	}
+	a.captured = true
+	if dir := filepath.Clean(a.fmDir); dir != filepath.Clean(a.startDir) {
+		a.Opts.LastDir = dir
+	}
+	a.Opts.LastSong, a.Opts.LastPosition = a.Player.ResumePoint()
+	if a.Mixer != nil {
+		a.Opts.Volume = a.Mixer.Device(audio.DevVolume).Value
+		a.Opts.Balance = a.Mixer.Device(audio.DevBalance).Value
+	}
+	a.Opts.Repeat = a.Player.Repeat
+	a.Opts.PlayMode = a.Player.Mode
+}
+
+// RestoreSession loads the playlist saved by WriteSession and prepares the
+// last song (Opts.LastSong at Opts.LastPosition) to continue on the next
+// Play, without starting playback.
+func (a *App) RestoreSession(path string) {
+	if gs, err := playlist.Load(path, a.Root); err == nil {
+		a.Root.Shuffle = gs.Shuffle
+	}
+	if a.Opts.LastSong == "" {
+		return
+	}
+	a.Player.Resume(a.Opts.LastSong, a.Opts.LastPosition)
+	a.SetMessage(fmt.Sprintf("Press '%s' to continue %s at %d:%02d",
+		strings.TrimSpace(a.Keys.LabelFor(keys.CmdPlayPlay)), media.ChopPath(a.Opts.LastSong),
+		a.Opts.LastPosition/60, a.Opts.LastPosition%60))
+}
+
+// WriteSession saves the playlist for RestoreSession.
+func (a *App) WriteSession(path string) error {
+	return playlist.Save(path, a.Root, playModeName(a.Player.Mode))
+}
+
+// Tick is called periodically by the UI to update the play time.
+func (a *App) Tick() bool { return a.Player.Tick() }
+
+// TickInterval is the display refresh interval derived from --runframes:
+// one MPEG frame lasts about 26ms.
+func (a *App) TickInterval() time.Duration {
+	return time.Duration(a.Opts.FPL) * 26 * time.Millisecond * 2
+}
+
+// --- main window ------------------------------------------------------------
+
+func (a *App) groupView(g *playlist.Group) *groupView {
+	v, ok := a.views[g]
+	if !ok {
+		v = &groupView{display: a.Opts.DisplayMode}
+		a.views[g] = v
+	}
+	return v
+}
+
+// MainView returns the scroll state of the main window.
+func (a *App) MainView() *listview.State {
+	switch a.Mode {
+	case keys.ModeFileSelection:
+		return &a.fmView
+	case keys.ModeHelp:
+		return &a.helpView
+	default:
+		return &a.groupView(a.Cur).state
+	}
+}
+
+// MainLen returns the number of lines in the main window.
+func (a *App) MainLen() int {
+	switch a.Mode {
+	case keys.ModeFileSelection:
+		return a.fm.Len()
+	case keys.ModeHelp:
+		return len(a.help)
+	default:
+		return a.Cur.Len()
+	}
+}
+
+// MainTitle returns the title drawn in the border of the main window.
+func (a *App) MainTitle() string {
+	switch a.Mode {
+	case keys.ModeFileSelection:
+		return a.fm.Dir()
+	case keys.ModeHelp:
+		return ""
+	default:
+		return a.Cur.Title
+	}
+}
+
+// MainHighlight reports whether the selection bar is drawn.
+func (a *App) MainHighlight() bool { return true }
+
+// MainRow returns line i of the main window.
+func (a *App) MainRow(i int) Row {
+	switch a.Mode {
+	case keys.ModeFileSelection:
+		e := a.fm.Entry(i)
+		if e == nil {
+			return Row{}
+		}
+		r := Row{Text: a.fm.DisplayName(i, a.fmDisplay), Marked: e.Selected()}
+		switch e.Kind {
+		case filemanager.KindDir:
+			r.Kind = RowDir
+		case filemanager.KindAudio:
+			r.Kind = RowSong
+		case filemanager.KindPlaylist:
+			r.Kind = RowPlaylist
+		default:
+			r.Kind = RowOther
+		}
+		return r
+	case keys.ModeHelp:
+		if i < 0 || i >= len(a.help) {
+			return Row{}
+		}
+		return Row{Text: a.help[i]}
+	default:
+		it := a.Cur.Item(i)
+		if it == nil {
+			return Row{}
+		}
+		r := Row{Text: playlist.DisplayName(it, a.groupView(a.Cur).display), Marked: it.Selected()}
+		switch it.Kind {
+		case playlist.KindGroup:
+			r.Kind = RowGroup
+		case playlist.KindParent:
+			r.Kind = RowParent
+		default:
+			r.Kind = RowSong
+			if p, _, ok := a.Player.SongInfo(); ok && a.Player.HasSong() && p == it.Path {
+				r.Playing = true
+			}
+		}
+		return r
+	}
+}
+
+// --- status area --------------------------------------------------------------
+
+// ModeLine returns the text of the line below the help bar: the global play
+// mode, or the sort mode in the file manager.
+func (a *App) ModeLine() string {
+	if a.Mode == keys.ModeFileSelection {
+		return "Sorting mode   : " + a.fm.Sort().Description()
+	}
+	return a.Player.Mode.Description()
+}
+
+// HelpEntry is one item of the key overview.
+type HelpEntry struct {
+	Label string
+	Desc  string
+	Cmd   keys.Command
+}
+
+// HelpBarLines returns the key overview, three entries per line. Every
+// category starts on a new line.
+func (a *App) HelpBarLines() [][]HelpEntry {
+	var lines [][]HelpEntry
+	for _, group := range a.Keys.Grouped(a.Mode, true) {
+		var line []HelpEntry
+		for _, b := range group {
+			line = append(line, HelpEntry{Label: b.Key.Label(), Desc: b.Desc, Cmd: b.Cmd})
+			if len(line) == 3 {
+				lines = append(lines, line)
+				line = nil
+			}
+		}
+		if len(line) > 0 {
+			lines = append(lines, line)
+		}
+	}
+	return lines
+}
+
+// keyReference lists all working key bindings by category for the end of
+// the help screen.
+func keyReference(km *keys.Table) []string {
+	out := []string{"", "Key bindings", "============"}
+	for _, group := range km.Grouped(keys.ModeAny, false) {
+		out = append(out, "", group[0].Group.String())
+		// The same key and text in several modes is listed once.
+		var merged []keys.Binding
+		for _, b := range group {
+			dup := false
+			for i := range merged {
+				if merged[i].Key == b.Key && merged[i].Desc == b.Desc {
+					merged[i].Modes |= b.Modes
+					dup = true
+				}
+			}
+			if !dup {
+				merged = append(merged, b)
+			}
+		}
+		for _, b := range merged {
+			line := fmt.Sprintf("  %-5s %-20s %s", b.Key.Name(), b.Desc, modeNote(b.Modes))
+			out = append(out, strings.TrimRight(line, " "))
+		}
+	}
+	return out
+}
+
+func modeNote(m keys.Mode) string {
+	switch m {
+	case keys.ModeNormal:
+		return "(Normal Mode)"
+	case keys.ModeFileSelection:
+		return "(File Mode)"
+	case keys.ModeNormal | keys.ModeFileSelection:
+		return "(Normal/File Mode)"
+	}
+	return ""
+}
+
+// Shuffle reports whether the current group plays in random order.
+func (a *App) Shuffle() bool { return a.Cur.Shuffle }
+
+// Repeat reports whether the playlist repeats.
+func (a *App) Repeat() bool { return a.Player.Repeat }

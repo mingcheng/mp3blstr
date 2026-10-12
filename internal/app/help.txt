@@ -1,0 +1,182 @@
+This screen explains the commands of mp3blaster. The
+program has two main modes: Normal Mode and File Mode. In
+Normal Mode you control the playlist shown in the main
+window. In File Mode a file manager is shown in the main
+window, which you use to browse your disks and to add
+files to the playlist. Switch from Normal Mode to File
+Mode with F1 (default key binding; all bindings can be
+changed in ~/.config/mp3blaster/mp3blasterrc, see the
+README).
+The window at the top of the screen lists the keys that
+are available in the current mode, sorted by category
+(playlist or file manager, playback, search & selection,
+display & settings, general). Keys shown elsewhere on the
+screen (CD-player buttons, mixer, '( - )'/'( + )') and the
+cursor keys are left out; the complete list of key
+bindings is at the end of this screen. Browse the window
+with '-' and '+', or with the mouse wheel. Clicking an
+entry with the mouse runs that command.
+
+Mouse support
+=============
+
+  Click          Move the selection bar to a line.
+  Double click   Same as ENTER (play a song, open a group
+                 or directory, load a playlist).
+  Right click    Select/unselect a line (like SPACE).
+  Wheel          Scroll through the list.
+  Buttons        The CD-player buttons on the right, the
+                 shuffle/repeat check boxes, the play mode
+                 line, the help bar and the mixer can all
+                 be clicked. Use the wheel on the mixer to
+                 change the volume.
+
+Commands specific to Normal Mode
+================================
+
+SELECT FILES
+  Enter File Mode.
+
+ADD GROUP
+  Add a group to the playlist. A group can be thought of as
+  an album or a music category. Groups can be nested
+  indefinitely.
+
+SET GROUP TITLE
+  Change the name of the highlighted group. You will be
+  asked to enter a name.
+
+LOAD/ADD PLAYLIST
+  Enter File Mode in the playlist directory (PlaylistDir).
+  Press ENTER on a playlist (.lst or .m3u) to add its
+  contents to the current group.
+
+WRITE PLAYLIST
+  Save the complete playlist, including all groups, in the
+  playlist directory.
+
+CLEAR PLAYLIST
+  Remove all entries from the playlist (without asking!).
+  Only works when nothing is playing.
+
+MOVE FILES AFTER / MOVE FILES BEFORE
+  Move the selected songs after (or before) the highlighted
+  entry, in the order in which they were selected. Songs
+  can't be moved between groups.
+
+SELECT FILE
+  Select or unselect the highlighted song. Selected entries
+  are shown in bold.
+
+DELETE / DELETE AND MARK
+  Remove the highlighted entry from the playlist. DELETE AND
+  MARK also moves the file into a 'baditems' directory next
+  to it.
+
+ENTER
+  On a song: play it immediately. When a playlist was
+  playing it continues after this song.
+  On a group: enter the group. The special group '[..]'
+  takes you back to the parent group.
+
+TOGGLE REPEAT
+  Start again from the beginning when the playlist ends.
+  Available in all modes.
+
+TOGGLE GROUPSHUFFLE
+  Play the songs of the current group in random order.
+  Available in all modes.
+
+TOGGLE PLAY MODE
+  Choose between playing the current group only, the
+  current group including all its sub groups, or all songs
+  of all groups in random order. Not possible while
+  playing.
+
+Commands specific to File Mode
+==============================
+
+ADD FILES TO LIST
+  Leave File Mode and add all selected files to the
+  current group. Files can be selected in several
+  directories before adding them.
+
+INVERT SELECTION
+  Select all unselected files and vice versa.
+
+RECURS. SELECT ALL
+  Add all audio files in this directory and in all its sub
+  directories to the current group. Scanning runs in the
+  background with a progress dialog (current directory,
+  files and folders found, elapsed time); press ESC or 'c'
+  (or click Cancel) to stop it without adding anything.
+
+ENTER NEW PATH
+  Type the name of a directory to go to.
+
+ADD DIRS AS GROUPS
+  Every sub directory (recursively) containing audio files
+  becomes a group in the playlist. Like RECURS. SELECT ALL
+  this shows a progress dialog and can be cancelled.
+
+ADD URL (SHOUTCAST)
+  Add an http:// stream (Shoutcast/Icecast) to the files
+  that will be added to the playlist.
+
+TOGGLE FILE SORT
+  Cycle through the sort modes: alphabetical (case
+  insensitive / sensitive), modification date and size.
+
+GO UP ONE DIR
+  Go to the parent directory.
+
+SELECT FILE
+  Select or unselect the highlighted file.
+
+RENAME FILE / DELETE FILE / MARK FILE(S) AS BAD
+  Rename the highlighted file, delete it (after asking for
+  confirmation) or move the selected files into a
+  'baditems' directory.
+
+ENTER
+  Enter a directory, load a playlist or play a song.
+
+Commands available in all modes
+===============================
+
+PLAY SONG          Start the playlist, or pause/resume.
+STOP SONG          Stop playing and reset the playlist.
+PREVIOUS/NEXT SONG Go back in the play history / skip.
+REWIND/FORWARD     Skip SkipLength seconds (default 10).
+SKIP TO END SONG   Jump to the last seconds of the song.
+PREVIOUS/NEXT GROUP
+                   Skip the rest of the group being played.
+START SEARCH       Type the beginning of a name to jump to
+                   it. The search ends after 2 seconds of
+                   inactivity or with ENTER.
+TOGGLE FILE DISPLAY
+                   Show full paths, file names or ID3 tags
+                   (playlist), or names, sizes or ID3 tags
+                   (file manager).
+SELECT SOME ITEMS  Select entries matching a pattern
+                   (shell wildcards, or regular expressions
+                   with SelectItems.SearchRegex = yes).
+UNSELECT ALL       Clear the selection.
+CHANGE #THREADS    Size of the read-ahead buffer used for
+                   the next song (0 disables it).
+TOGGLE MIXER DEVICE
+                   Switch between Volume and Balance.
+MIXERVOLUME DOWN/UP
+                   Change the current mixer device.
+PAN WINDOW LEFT/RIGHT
+                   Scroll long names horizontally.
+TOGGLE LIST WRAP   Wrap around at the ends of lists.
+SWITCH THEME       Cycle through the colour themes (classic,
+                   modern) at run time.
+TOGGLE NERD FONT   Switch between plain symbols and Nerd
+                   Font icons at run time.
+START/END OF LIST, PREVIOUS/NEXT PAGE, MOVE SCROLLBAR
+                   Navigate in the main window.
+REFRESH SCREEN     Redraw everything.
+SHOW HELP          Show (or leave) this screen.
+QUIT MP3BLASTER    Leave the program.
