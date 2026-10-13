@@ -72,40 +72,29 @@ Adding audio paths
   group; directories must be added through the file manager.
   Rebind with keys.add_paths in the configuration file.
 
-macOS integration
-=================
+System media controls
+=====================
 
-  Find playback controls in Control Center > Now Playing,
-  not Notification Center. Add the Now Playing control if
-  it is missing. To show a menu-bar icon, enable Now Playing
-  in System Settings > Menu Bar (Control Center on some
-  versions). App notification permissions are unrelated.
-  Registration failures appear as "System media controls
-  unavailable"; use --debug for the full error.
+  playback.media_keys enables system controls (on by default):
+  Linux: KDE/GNOME media controls via MPRIS; needs session D-Bus.
+  macOS: Control Center > Now Playing.
+  Windows: global media hotkeys.
 
-  Now Playing shows the title, artist, album, duration and
-  playback position. Pausing, resuming and seeking resync the
-  system timeline; unknown stream durations are omitted.
-  Embedded JPEG/PNG/GIF covers are loaded in the background
-  and scaled to at most 1024 pixels per side. Missing covers
-  are normal; corrupt or oversized covers are logged with
-  --debug without interrupting playback. No online artwork
-  or folder-image lookup is performed.
-  System position controls seek within seekable tracks of
-  known duration, with whole-second precision. Seeking while
-  paused keeps the track paused. Streams and stopped tracks
-  disable position control; stale commands after a track
-  change are rejected. macOS decides which controls to show.
-  playback.media_keys enables artwork and position control.
-  By default, system sleep and changes to the default audio
-  output pause playback. Waking the system does not resume
-  playback: press Play to resume.
-  Disable these independently with playback.pause_on_sleep
-  and playback.pause_on_output_change. They work even with
-  playback.media_keys disabled.
-  The audio backend retries supported temporary failures;
-  a fatal device error stops the playlist and asks for a
-  restart, preserving the track and position for the next run.
+  Linux and macOS show track information, playback position
+  and embedded JPEG/PNG/GIF covers. No online or folder-image
+  lookup is performed. Available controls depend on the desktop.
+  Seeking requires a seekable track with known duration;
+  streams disable seeking, and paused tracks stay paused.
+  Linux also supports repeat (off, playlist or single track)
+  and shuffle for the current group, synchronized with the
+  terminal controls.
+
+  macOS pauses on sleep and audio output changes by default.
+  Configure playback.pause_on_sleep and
+  playback.pause_on_output_change independently of media keys.
+  Press Play to resume after waking.
+
+  Use --debug to diagnose unavailable controls or cover errors.
 
 Commands specific to Normal Mode
 ================================

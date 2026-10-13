@@ -133,7 +133,7 @@ func run(args []string) int {
 	if opts.MediaKeys {
 		controls, err := mediakeys.Start(func(command mediakeys.Command) {
 			u.Post(func() {
-				if err := handleMediaCommand(a.Player, command); err != nil {
+				if err := handleAppMediaCommand(a, command); err != nil {
 					logger.Warn("media command rejected", "err", err)
 					a.Warning(err.Error())
 				}
@@ -145,8 +145,11 @@ func run(args []string) int {
 		} else {
 			defer controls.Close()
 			a.OnPlaybackChange = func() {
-				controls.Update(playbackSnapshot(a.Player))
+				snapshot := playbackSnapshot(a.Player)
+				snapshot.Shuffle = a.Shuffle()
+				controls.Update(snapshot)
 			}
+			a.OnPlaybackChange()
 		}
 	}
 	start(a, cli, persist)
@@ -209,6 +212,23 @@ type mediaPlayer interface {
 	SeekTo(int)
 }
 
+func handleAppMediaCommand(a *app.App, command mediakeys.Command) error {
+	switch command.Action {
+	case mediakeys.SetLoopStatus:
+		switch command.LoopStatus {
+		case "None", "Playlist", "Track":
+			a.SetRepeat(command.LoopStatus != "None", command.LoopStatus == "Track")
+		default:
+			return fmt.Errorf("invalid repeat mode %q", command.LoopStatus)
+		}
+	case mediakeys.SetShuffle:
+		a.SetShuffle(command.Enabled)
+	default:
+		return handleMediaCommand(a.Player, command)
+	}
+	return nil
+}
+
 func handleMediaCommand(p mediaPlayer, command mediakeys.Command) error {
 	switch command.Action {
 	case mediakeys.PlayPause:
@@ -247,6 +267,13 @@ func playbackSnapshot(p *playback.Controller) mediakeys.Snapshot {
 	s := mediakeys.Snapshot{
 		Status: "Stopped", Path: path, Title: info.Title, Artist: info.Artist, Album: info.Album,
 		Duration: info.TotalSeconds, Revision: p.Revision(), TrackID: p.TrackID(), CanSeek: p.CanSeek(),
+	}
+	s.LoopStatus = "None"
+	if p.Repeat {
+		s.LoopStatus = "Playlist"
+		if p.RepeatTrack {
+			s.LoopStatus = "Track"
+		}
 	}
 	if p.HasSong() {
 		s.Status, s.Position = "Playing", p.Elapsed()

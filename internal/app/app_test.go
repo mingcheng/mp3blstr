@@ -97,6 +97,38 @@ func press(a *App, ks ...any) {
 	}
 }
 
+func TestSetPlaybackModes(t *testing.T) {
+	a, _ := newTestApp(t)
+	changes := 0
+	a.OnPlaybackChange = func() { changes++ }
+	a.Player.QuitAfterPlaylist = true
+	a.SetRepeat(true, true)
+	if !a.Repeat() || !a.Player.RepeatTrack || !a.Opts.Repeat || a.Player.QuitAfterPlaylist {
+		t.Fatal("track repeat was not applied")
+	}
+	a.SetRepeat(true, false)
+	if !a.Repeat() || a.Player.RepeatTrack {
+		t.Fatal("playlist repeat was not applied")
+	}
+	a.SetRepeat(false, true)
+	if a.Repeat() || a.Player.RepeatTrack || a.Opts.Repeat {
+		t.Fatal("repeat was not disabled")
+	}
+	for _, enabled := range []bool{true, true, false} {
+		a.SetShuffle(enabled)
+		if a.Shuffle() != enabled {
+			t.Fatal("shuffle target was toggled instead of applied")
+		}
+	}
+	if changes != 6 {
+		t.Fatalf("mode changes published %d times", changes)
+	}
+	press(a, 'R', 'Z')
+	if !a.Repeat() || !a.Shuffle() || changes != 8 {
+		t.Fatal("keyboard modes did not publish changes")
+	}
+}
+
 func TestSelectFilesAcrossDirectories(t *testing.T) {
 	a, _ := newTestApp(t)
 	press(a, tcell.KeyF1)

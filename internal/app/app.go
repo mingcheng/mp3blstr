@@ -556,3 +556,18 @@ func (a *App) Shuffle() bool { return a.Cur.Shuffle }
 
 // Repeat reports whether the playlist repeats.
 func (a *App) Repeat() bool { return a.Player.Repeat }
+
+func (a *App) SetRepeat(enabled, track bool) {
+	a.Player.Repeat = enabled
+	a.Player.RepeatTrack = enabled && track
+	a.Opts.Repeat = enabled
+	if enabled {
+		a.Player.QuitAfterPlaylist = false
+	}
+	a.playerChanged()
+}
+
+func (a *App) SetShuffle(enabled bool) {
+	a.Cur.Shuffle = enabled
+	a.Player.ResetNextSong()
+}

@@ -147,6 +147,7 @@ type Controller struct {
 	// Settings, changed directly by the application.
 	Mode              PlayMode
 	Repeat            bool
+	RepeatTrack       bool
 	SkipSeconds       int
 	QuitAfterPlaylist bool
 
@@ -644,6 +645,8 @@ func (c *Controller) finished(gen int) {
 	if err := c.stopSong(); errors.Is(err, media.ErrDeviceLost) {
 		c.stopList()
 		c.Resume(c.songPath, c.elapsed)
+	} else if err == nil && c.playing && c.Repeat && c.RepeatTrack {
+		c.open(c.songPath)
 	} else {
 		c.advance()
 	}

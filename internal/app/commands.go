@@ -172,11 +172,7 @@ func (a *App) Exec(cmd keys.Command) {
 			a.openPopup([]string{"Enter Name:"}, "", 48, a.setGroupName)
 		}
 	case keys.CmdToggleRepeat:
-		p.Repeat = !p.Repeat
-		a.Opts.Repeat = p.Repeat
-		if p.Repeat {
-			p.QuitAfterPlaylist = false
-		}
+		a.SetRepeat(!p.Repeat, false)
 	case keys.CmdToggleFadeOut:
 		a.Opts.FadeOut = !a.Opts.FadeOut
 		if a.fadeMixer != nil {
@@ -188,8 +184,7 @@ func (a *App) Exec(cmd keys.Command) {
 			a.SetMessage("Fade out disabled")
 		}
 	case keys.CmdToggleShuffle:
-		a.Cur.Shuffle = !a.Cur.Shuffle
-		p.ResetNextSong()
+		a.SetShuffle(!a.Cur.Shuffle)
 	case keys.CmdTogglePlaymode:
 		if p.Playing() {
 			a.Warning("Not possible during playback")

@@ -3,8 +3,11 @@ package main
 import (
 	"testing"
 
+	"github.com/mingcheng/mp3blstr/internal/app"
+	"github.com/mingcheng/mp3blstr/internal/config"
 	"github.com/mingcheng/mp3blstr/internal/media"
 	"github.com/mingcheng/mp3blstr/internal/mediakeys"
+	"github.com/mingcheng/mp3blstr/internal/playback"
 )
 
 type mediaPlayerFake struct {
@@ -42,6 +45,26 @@ func (p *mediaPlayerFake) SongInfo() (string, media.SongInfo, bool) {
 	return "song.mp3", media.SongInfo{TotalSeconds: 60}, true
 }
 func (p *mediaPlayerFake) SeekTo(pos int) { p.seeks = append(p.seeks, pos) }
+
+func TestMediaRepeatModes(t *testing.T) {
+	a := &app.App{Player: &playback.Controller{}, Opts: config.Default()}
+	var modes []string
+	a.OnPlaybackChange = func() { modes = append(modes, playbackSnapshot(a.Player).LoopStatus) }
+	for _, mode := range []string{"Playlist", "Track", "None"} {
+		if err := handleAppMediaCommand(a, mediakeys.Command{Action: mediakeys.SetLoopStatus, LoopStatus: mode}); err != nil {
+			t.Fatal(err)
+		}
+		if snapshot := playbackSnapshot(a.Player); snapshot.LoopStatus != mode {
+			t.Fatalf("repeat snapshot = %q, want %q", snapshot.LoopStatus, mode)
+		}
+	}
+	if len(modes) != 3 {
+		t.Fatalf("repeat changes published %d times", len(modes))
+	}
+	if err := handleAppMediaCommand(a, mediakeys.Command{Action: mediakeys.SetLoopStatus, LoopStatus: "Invalid"}); err == nil || a.Repeat() {
+		t.Fatal("invalid repeat mode changed playback")
+	}
+}
 
 func TestMediaActions(t *testing.T) {
 	p := &mediaPlayerFake{}

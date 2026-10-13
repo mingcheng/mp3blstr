@@ -16,14 +16,18 @@ const (
 	Previous
 	Stop
 	Seek
+	SetLoopStatus
+	SetShuffle
 )
 
-// Command carries a target only for Seek. TrackID prevents delayed commands
-// for a previous track from seeking the next one.
+// Command carries explicit seek and playback-mode targets. TrackID prevents
+// delayed commands for a previous track from seeking the next one.
 type Command struct {
-	Action   Action
-	Position float64
-	TrackID  int
+	Action     Action
+	Position   float64
+	TrackID    int
+	LoopStatus string
+	Enabled    bool
 }
 
 // SeekSeconds validates a native target and converts it to the player's
@@ -52,6 +56,8 @@ type Snapshot struct {
 	Duration, Position, Revision int
 	TrackID                      int
 	CanSeek                      bool
+	LoopStatus                   string
+	Shuffle                      bool
 }
 
 func (s Snapshot) samePlayback(other Snapshot) bool {

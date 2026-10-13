@@ -1,6 +1,7 @@
 package playback
 
 import (
+	"errors"
 	"math/rand/v2"
 	"strings"
 	"testing"
@@ -177,6 +178,67 @@ func TestShuffleAllPlaysEverySongOnce(t *testing.T) {
 	}
 	if len(seen) != 6 {
 		t.Fatalf("played %d songs", len(seen))
+	}
+}
+
+func TestRepeatTrack(t *testing.T) {
+	root := playlist.NewGroup("[Default]")
+	root.AddSong("a")
+	root.AddSong("b")
+	h := newHarness(root)
+	defer h.c.Shutdown()
+	h.c.Repeat, h.c.RepeatTrack = true, true
+	h.c.Play()
+	h.settle(t)
+	for count := 0; count < 3; count++ {
+		h.finishSong(t)
+		if current(h.c) != "a" {
+			t.Fatalf("track repeat played %q", current(h.c))
+		}
+	}
+	h.c.Next()
+	h.settle(t)
+	if current(h.c) != "b" {
+		t.Fatalf("manual Next played %q", current(h.c))
+	}
+	h.c.Repeat = false
+	h.finishSong(t)
+	if h.c.Playing() {
+		t.Fatal("disabled repeat kept playing")
+	}
+}
+
+func TestRepeatTrackDoesNotRetryPlaybackErrors(t *testing.T) {
+	root := playlist.NewGroup("[Default]")
+	root.AddSong("a")
+	root.AddSong("b")
+	h := newHarness(root)
+	defer h.c.Shutdown()
+	h.c.Repeat, h.c.RepeatTrack = true, true
+	h.c.Play()
+	h.settle(t)
+	h.c.track.(*fakeTrack).err = errors.New("decode failed")
+	h.finishSong(t)
+	if current(h.c) != "b" {
+		t.Fatalf("failed track was repeated: %q", current(h.c))
+	}
+}
+
+func TestRepeatSingleTrack(t *testing.T) {
+	h := newHarness(playlist.NewGroup("[Default]"))
+	defer h.c.Shutdown()
+	h.c.Repeat, h.c.RepeatTrack = true, true
+	h.c.PlayOne("single")
+	h.settle(t)
+	h.finishSong(t)
+	if current(h.c) != "single" {
+		t.Fatal("single track did not repeat")
+	}
+	h.c.RepeatTrack = false
+	h.c.Repeat = false
+	h.finishSong(t)
+	if h.c.Playing() {
+		t.Fatal("single track did not stop after repeat disabled")
 	}
 }
 

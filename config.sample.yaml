@@ -38,8 +38,8 @@ ui:
 
 playback:
   # play_mode: allgroups     # onegroup, allgroups or allrandom
-  # media_keys: true         # global media controls (Linux MPRIS, Windows hotkeys,
-  #                          # macOS Now Playing with embedded artwork and seeking);
+  # media_keys: true         # Linux MPRIS and macOS Now Playing: metadata,
+  #                          # embedded artwork and seeking; Windows: hotkeys;
   #                          # false disables registration and artwork loading
   # pause_on_sleep: true     # macOS: pause on sleep; wake never auto-resumes
   # pause_on_output_change: true # macOS: pause when the default audio output changes
