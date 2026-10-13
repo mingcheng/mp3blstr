@@ -16,6 +16,7 @@ ui:
   #                          # (original behaviour)
   # display_mode: filename  # playlist: path, filename or id3 (toggle: f)
   # wrap_around: true        # moving past the end of a list wraps around
+  # confirm_quit: true       # ask for confirmation before quitting
   # pan_size: 5              # columns panned by left/right (1..40)
 
   # Colours: black, red, green, yellow, blue, magenta, cyan, white, default

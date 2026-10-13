@@ -126,6 +126,7 @@ func keywords(o *Options) map[string]keyword {
 		"ui.list_width":   parsedKw(&o.ListWidth, listview.ParseWidth),
 		"ui.display_mode": parsedKw(&o.DisplayMode, playlist.ParseDisplayMode),
 		"ui.wrap_around":  boolKw(&o.Wrap),
+		"ui.confirm_quit": boolKw(&o.ConfirmQuit),
 		"ui.pan_size":     numberKw(&o.PanSize, func(n int) bool { return n >= 1 && n <= 40 }),
 
 		"playback.play_mode":    parsedKw(&o.PlayMode, playback.ParsePlayMode),

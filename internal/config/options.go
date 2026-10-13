@@ -67,10 +67,11 @@ type Options struct {
 	Keys    []KeyBinding
 
 	// Modern extensions.
-	Theme     string // one of Themes
-	NerdFont  bool
-	Mouse     bool
-	ListWidth listview.Width // width of the main window
+	Theme       string // one of Themes
+	NerdFont    bool
+	Mouse       bool
+	ListWidth   listview.Width // width of the main window
+	ConfirmQuit bool           // ask before leaving the program
 
 	// State saved in the configuration file on exit (see StateSettings).
 	SaveState    bool
@@ -106,6 +107,7 @@ func Default() *Options {
 		Theme:                 Themes[0],
 		Mouse:                 true,
 		ListWidth:             listview.DefaultWidth,
+		ConfirmQuit:           true,
 		SaveState:             true,
 		Volume:                100,
 		Balance:               50,

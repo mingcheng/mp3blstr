@@ -67,7 +67,11 @@ func (a *App) Exec(cmd keys.Command) {
 			a.Cur.MoveSelected(v.Cursor, cmd == keys.CmdMoveBefore)
 		}
 	case keys.CmdQuitProgram:
-		a.Quit()
+		if a.Opts.ConfirmQuit {
+			a.openConfirm([]string{"Quit mp3blasterr?"}, a.Quit)
+		} else {
+			a.Quit()
+		}
 	case keys.CmdHelp:
 		if a.Mode == keys.ModeHelp {
 			a.setMode(keys.ModeNormal)

@@ -172,6 +172,23 @@ func TestTogglesAndHelp(t *testing.T) {
 		t.Fatal("help bar should scroll")
 	}
 	press(a, 'q')
+	if a.Input != InputConfirm || a.view.(*fakeView).quit != 0 {
+		t.Fatal("quit should ask for confirmation")
+	}
+	press(a, 'n')
+	if a.Input != InputDefault || a.view.(*fakeView).quit != 0 {
+		t.Fatal("quit should be cancelled")
+	}
+	press(a, 'q', 'y')
+	if a.view.(*fakeView).quit != 1 {
+		t.Fatal("quit")
+	}
+}
+
+func TestQuitWithoutConfirmation(t *testing.T) {
+	a, _ := newTestApp(t)
+	a.Opts.ConfirmQuit = false
+	press(a, 'q')
 	if a.view.(*fakeView).quit != 1 {
 		t.Fatal("quit")
 	}

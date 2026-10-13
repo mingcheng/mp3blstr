@@ -218,7 +218,9 @@ SHOW HELP          Show (or leave) this screen.
 QUIT MP3BLASTERR   Leave the program. Changed settings, the
                    playlist and the current song and its
                    position are saved for the next start
-                   (unless state.save is false).
+                   (unless state.save is false). Asks
+                   for confirmation first unless
+                   ui.confirm_quit is false.
 
 All keys can be changed in the keys section of
 ~/.config/mp3blasterr/config.yaml. The current bindings are
