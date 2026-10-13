@@ -12,16 +12,18 @@ import (
 // The sample configuration must parse as shipped and with all settings
 // uncommented, and document the actual defaults.
 func TestSampleConfig(t *testing.T) {
-	data, err := os.ReadFile("../../config.sample.yaml")
+	raw, err := os.ReadFile("../../config.sample.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := Default().Parse(strings.NewReader(string(data))); err != nil {
+	// Git may check the file out with CRLF line endings (e.g. on Windows).
+	data := strings.ReplaceAll(string(raw), "\r\n", "\n")
+	if err := Default().Parse(strings.NewReader(data)); err != nil {
 		t.Fatalf("as shipped: %v", err)
 	}
 
 	setting := regexp.MustCompile(`(?m)^(\s*)# (\s*[a-z][a-z0-9_]*:( .*)?)$`)
-	all := setting.ReplaceAllString(string(data), "$1$2")
+	all := setting.ReplaceAllString(data, "$1$2")
 	o := Default()
 	if err := o.Parse(strings.NewReader(all)); err != nil {
 		t.Fatalf("uncommented: %v\n%s", err, all)

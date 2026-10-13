@@ -104,7 +104,7 @@ func TestSelectFilesAcrossDirectories(t *testing.T) {
 	press(a, ' ')
 	a.MainView().Set(2, a.MainLen())
 	press(a, tcell.KeyEnter) // into Album/
-	if a.MainTitle()[len(a.MainTitle())-6:] != "Album/" {
+	if !strings.HasSuffix(a.MainTitle(), "Album"+string(filepath.Separator)) {
 		t.Fatalf("title %q", a.MainTitle())
 	}
 	a.MainView().Set(2, a.MainLen()) // x.mp3
