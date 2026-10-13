@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/binary"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,9 +14,11 @@ import (
 
 	"github.com/mingcheng/mp3blasterr/internal/audio"
 	"github.com/mingcheng/mp3blasterr/internal/config"
+	"github.com/mingcheng/mp3blasterr/internal/filemanager"
 	"github.com/mingcheng/mp3blasterr/internal/keys"
 	"github.com/mingcheng/mp3blasterr/internal/media"
 	"github.com/mingcheng/mp3blasterr/internal/playback"
+	"github.com/mingcheng/mp3blasterr/internal/playlist"
 )
 
 type fakeView struct {
@@ -171,6 +174,77 @@ func TestTogglesAndHelp(t *testing.T) {
 	press(a, 'q')
 	if a.view.(*fakeView).quit != 1 {
 		t.Fatal("quit")
+	}
+}
+
+func TestDisplayModesSavedOnToggle(t *testing.T) {
+	a, _ := newTestApp(t)
+	press(a, 'f')
+	if a.Opts.DisplayMode != playlist.DisplayID3 || a.groupView(a.Root).display != playlist.DisplayID3 {
+		t.Fatal("playlist display mode was not updated")
+	}
+	press(a, tcell.KeyF1, 'f')
+	if a.Opts.FileDisplayMode != filemanager.DisplayID3 {
+		t.Fatal("file display mode was not updated")
+	}
+	a.CaptureState()
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := config.SaveSettings(path, config.ChangedSettings(config.Default().StateSettings(), a.Opts.StateSettings())); err != nil {
+		t.Fatal(err)
+	}
+	loaded := config.Default()
+	if err := loaded.LoadFile(path); err != nil {
+		t.Fatal(err)
+	}
+	if loaded.DisplayMode != playlist.DisplayID3 || loaded.FileDisplayMode != filemanager.DisplayID3 {
+		t.Fatalf("restored modes: playlist=%v file=%v", loaded.DisplayMode, loaded.FileDisplayMode)
+	}
+}
+
+func TestPlaylistRowDetails(t *testing.T) {
+	a, dir := newTestApp(t)
+	path := filepath.Join(dir, "tone.wav")
+	data := make([]byte, 44+32000)
+	copy(data, "RIFF")
+	binary.LittleEndian.PutUint32(data[4:], uint32(len(data)-8))
+	copy(data[8:], "WAVEfmt ")
+	binary.LittleEndian.PutUint32(data[16:], 16)
+	binary.LittleEndian.PutUint16(data[20:], 1)
+	binary.LittleEndian.PutUint16(data[22:], 1)
+	binary.LittleEndian.PutUint32(data[24:], 8000)
+	binary.LittleEndian.PutUint32(data[28:], 16000)
+	binary.LittleEndian.PutUint16(data[32:], 2)
+	binary.LittleEndian.PutUint16(data[34:], 16)
+	copy(data[36:], "data")
+	binary.LittleEndian.PutUint32(data[40:], 32000)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a.AddFiles([]string{path, "https://example.com/live"})
+	if got := a.MainRow(0).Right; got != filemanager.SizeDesc(int64(len(data))) {
+		t.Fatalf("filename mode size = %q", got)
+	}
+	if got := a.MainRow(1).Right; got != "" {
+		t.Fatalf("stream size = %q", got)
+	}
+	press(a, 'f')
+	if got := a.MainRow(0).Right; got != "" {
+		t.Fatalf("duration should load asynchronously, got %q", got)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for a.MainRow(0).Right == "" && time.Now().Before(deadline) {
+		a.view.(*fakeView).runPosted()
+		time.Sleep(time.Millisecond)
+	}
+	if got := a.MainRow(0).Right; got != "0:02" {
+		t.Fatalf("ID3 mode duration = %q", got)
+	}
+	if got := a.MainRow(1).Right; got != "" {
+		t.Fatalf("stream duration = %q", got)
+	}
+	press(a, 'f')
+	if got := a.MainRow(0).Right; got != "" {
+		t.Fatalf("path mode detail = %q", got)
 	}
 }
 

@@ -25,8 +25,8 @@ func (a *App) fmBegin() {
 		HideOthers: a.Opts.HideOthers,
 	})
 	a.fmView = listview.State{}
-	a.fmDisplay = filemanager.DisplaySize
-	if a.Opts.ID3Names {
+	a.fmDisplay = a.Opts.FileDisplayMode
+	if a.Opts.ID3Names && a.fmDisplay == filemanager.DisplaySize {
 		a.fmDisplay = filemanager.DisplayID3
 	}
 	a.setMode(keys.ModeFileSelection)

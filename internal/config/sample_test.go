@@ -40,12 +40,25 @@ func TestSampleConfig(t *testing.T) {
 		t.Errorf("patterns %q %q", o.AudioPatterns, o.PlaylistPatterns)
 	}
 	if o.Mouse != def.Mouse || o.ListWidth != def.ListWidth || o.PanSize != def.PanSize || o.SkipSeconds != def.SkipSeconds ||
-		o.Downsample != def.Downsample || o.HideOthers != def.HideOthers || o.ID3Names != def.ID3Names || o.ScanMP3 != def.ScanMP3 ||
+		o.Downsample != def.Downsample || o.HideOthers != def.HideOthers || o.ID3Names != def.ID3Names || o.GuessLegacyTags != def.GuessLegacyTags || o.MetadataCache != def.MetadataCache || o.ScanMP3 != def.ScanMP3 ||
 		o.SelectUnselectFirst != def.SelectUnselectFirst || o.SelectRegex != def.SelectRegex ||
 		o.SelectCaseInsensitive != def.SelectCaseInsensitive || o.SaveState != def.SaveState {
 		t.Errorf("sample values differ from the defaults: %+v", o)
 	}
 	if len(o.Colours) != 18 || len(o.Keys) != 23 {
 		t.Errorf("colours %d, keys %d", len(o.Colours), len(o.Keys))
+	}
+}
+
+func TestMetadataCacheSetting(t *testing.T) {
+	o := Default()
+	if !o.MetadataCache {
+		t.Fatal("metadata cache should be enabled by default")
+	}
+	if err := o.Parse(strings.NewReader("files:\n  metadata_cache: false\n")); err != nil {
+		t.Fatal(err)
+	}
+	if o.MetadataCache {
+		t.Fatal("metadata cache should be disabled by configuration")
 	}
 }

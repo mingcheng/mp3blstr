@@ -15,7 +15,7 @@ indent_size = 4
 [*.go]
 indent_style = tab
 indent_size = tab
-tab_width = 2
+tab_width = 8
 
 [*.md]
 # double whitespace at end of line

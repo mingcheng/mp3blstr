@@ -37,6 +37,10 @@ func (s *Screen) drawMain(c canvas, l layout) {
 			x += used
 			width -= used
 		}
+		if right := uniseg.StringWidth(row.Right); right > 0 && width > right+1 {
+			c.put(x+width-right, y, row.Right, style, right)
+			width -= right + 1
+		}
 		c.put(x, y, skipCells(row.Text, v.Pan), style, width)
 	}
 

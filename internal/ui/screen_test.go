@@ -2,6 +2,7 @@ package ui
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -105,6 +106,20 @@ func TestClassicLayout(t *testing.T) {
 		if l[c.y] != c.want {
 			t.Errorf("line %d:\n got %q\nwant %q", c.y, l[c.y], c.want)
 		}
+	}
+}
+
+func TestPlaylistSizeAlignment(t *testing.T) {
+	path := filepath.Join(t.TempDir(), strings.Repeat("a", 80)+".mp3")
+	if err := os.WriteFile(path, make([]byte, 12345), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	lines := render(t, 80, 24, func(a *app.App) { a.AddFiles([]string{path}) })
+	if got := strings.Index(lines[11], "[  12K]"); got != 62 {
+		t.Fatalf("size should stay at the right edge, column %d: %q", got, lines[11])
+	}
+	if !strings.HasPrefix(lines[11], "│aaaa") || lines[11][61] != ' ' {
+		t.Fatalf("long name must not overlap size: %q", lines[11])
 	}
 }
 

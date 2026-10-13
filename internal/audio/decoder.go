@@ -76,6 +76,24 @@ func newDecoder(rc io.ReadCloser, f format) (beep.StreamSeekCloser, beep.Format,
 	}
 }
 
+// Duration returns the length of a local audio file without starting playback.
+func Duration(path string) (int, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0, err
+	}
+	stream, format, err := newDecoder(f, formatOf(path))
+	if err != nil {
+		f.Close()
+		return 0, err
+	}
+	defer stream.Close()
+	if format.SampleRate <= 0 || stream.Len() <= 0 {
+		return -1, nil
+	}
+	return stream.Len() / int(format.SampleRate), nil
+}
+
 // decoded is an opened audio stream together with its metadata.
 type decoded struct {
 	stream   beep.StreamSeekCloser

@@ -31,17 +31,18 @@ type Options struct {
 	SoundDevice string
 	MixerDevice string
 
-	SortMode    filemanager.SortMode
-	HideOthers  bool
-	PlayMode    playback.PlayMode
-	Repeat      bool
-	FadeOut     bool
-	FadeSeconds int // seconds of end-of-track fade, set in config only
-	SkipSeconds int // seconds skipped by forward/rewind
-	PanSize     int // columns panned by left/right
-	Debug       bool
-	DisplayMode playlist.DisplayMode
-	Threads     int // read-ahead buffer (0..500 in steps of 50)
+	SortMode        filemanager.SortMode
+	HideOthers      bool
+	PlayMode        playback.PlayMode
+	Repeat          bool
+	FadeOut         bool
+	FadeSeconds     int // seconds of end-of-track fade, set in config only
+	SkipSeconds     int // seconds skipped by forward/rewind
+	PanSize         int // columns panned by left/right
+	Debug           bool
+	DisplayMode     playlist.DisplayMode
+	FileDisplayMode filemanager.DisplayMode
+	Threads         int // read-ahead buffer (0..500 in steps of 50)
 
 	AudioPatterns    []string
 	PlaylistPatterns []string
@@ -49,6 +50,8 @@ type Options struct {
 	CharsetTable     string
 
 	ID3Names              bool
+	GuessLegacyTags       bool
+	MetadataCache         bool
 	SelectUnselectFirst   bool
 	SelectRegex           bool
 	SelectCaseInsensitive bool
@@ -89,8 +92,10 @@ func Default() *Options {
 		SkipSeconds:           10,
 		PanSize:               5,
 		DisplayMode:           playlist.DisplayFileName,
+		FileDisplayMode:       filemanager.DisplaySize,
 		Threads:               100,
 		PlaylistDir:           media.HomeDir(),
+		MetadataCache:         true,
 		SelectCaseInsensitive: true,
 		Wrap:                  true,
 		Colours:               map[string]string{},

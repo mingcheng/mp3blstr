@@ -7,8 +7,12 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/dhowden/tag"
+	"github.com/saintfish/chardet"
+	"golang.org/x/text/encoding/htmlindex"
+	"golang.org/x/text/encoding/simplifiedchinese"
 )
 
 // SongInfo describes the song currently loaded by the player.
@@ -32,25 +36,93 @@ type Tags struct {
 type Recoder func(string) string
 
 var (
-	recodeMu sync.RWMutex
-	recoder  Recoder
+	recodeMu        sync.RWMutex
+	recoder         Recoder
+	guessLegacyTags bool
 )
+
+// SetGuessLegacyTags enables per-field recovery of mislabeled UTF-8 and GB18030 ID3 text.
+func SetGuessLegacyTags(enabled bool) {
+	recodeMu.Lock()
+	guessLegacyTags = enabled
+	recodeMu.Unlock()
+	metadata.Lock()
+	metadata.entries = map[string]metadataEntry{}
+	metadata.Unlock()
+}
 
 // SetRecoder installs a global tag text recoder.
 func SetRecoder(r Recoder) {
 	recodeMu.Lock()
 	recoder = r
 	recodeMu.Unlock()
+	metadata.Lock()
+	metadata.entries = map[string]metadataEntry{}
+	metadata.Unlock()
 }
 
 func recode(s string) string {
 	recodeMu.RLock()
 	r := recoder
+	guess := guessLegacyTags
 	recodeMu.RUnlock()
+	if guess {
+		s = guessTagText(s)
+	}
 	if r == nil {
 		return s
 	}
 	return r(s)
+}
+
+func guessTagText(s string) string {
+	if strings.IndexFunc(s, func(r rune) bool { return r > 127 }) < 0 {
+		return s
+	}
+	var raw []byte
+	for _, char := range s {
+		if char > 255 {
+			return s
+		}
+		raw = append(raw, byte(char))
+	}
+	if utf8.Valid(raw) {
+		return string(raw)
+	}
+	sample := raw
+	for len(sample) > 0 && sample[0] < 128 {
+		sample = sample[1:]
+	}
+	for len(sample) > 0 && sample[len(sample)-1] < 128 {
+		sample = sample[:len(sample)-1]
+	}
+	results, err := chardet.NewTextDetector().DetectAll(sample)
+	if err != nil {
+		return s
+	}
+	charset := results[0].Charset
+	for _, result := range results {
+		if result.Confidence < results[0].Confidence {
+			break
+		}
+		if result.Charset == "GB-18030" {
+			charset = result.Charset
+			break
+		}
+	}
+	encoding := simplifiedchinese.GB18030
+	if charset != "GB-18030" {
+		var err error
+		encoding, err = htmlindex.Get(charset)
+		if err != nil {
+			return s
+		}
+	}
+	decoded, err := encoding.NewDecoder().Bytes(raw)
+	if err == nil && !strings.ContainsRune(string(decoded), utf8.RuneError) {
+		return string(decoded)
+	}
+	return s
 }
 
 // LoadRecodeTable reads a character map file consisting of lines with two
@@ -105,6 +177,28 @@ func LoadRecodeTable(file string) (Recoder, error) {
 
 // ReadTags reads ID3v1/ID3v2/Vorbis/FLAC/MP4 tags from a local file.
 func ReadTags(path string) (Tags, error) {
+	if entry, ok := cachedEntry(path); ok {
+		metadata.Lock()
+		profile := metadata.profile
+		metadata.Unlock()
+		if entry.Profile == profile && entry.Tags != nil {
+			return *entry.Tags, nil
+		}
+	}
+	tags, err := readTags(path)
+	if err == nil {
+		storeEntry(path, func(entry *metadataEntry) {
+			if entry.Profile != metadata.profile {
+				entry.Name = nil
+			}
+			entry.Tags = &tags
+			entry.Profile = metadata.profile
+		})
+	}
+	return tags, err
+}
+
+func readTags(path string) (Tags, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return Tags{}, err
@@ -130,31 +224,38 @@ func clean(s string) string {
 	return recode(strings.TrimSpace(strings.Trim(s, "\x00")))
 }
 
-var id3Cache sync.Map // path -> string
-
 // ID3Name returns "[ID3] artist - title" for files with tags, or fallback
 // when the file has no usable tag. Results are cached.
 func ID3Name(path, fallback string) string {
-	if v, ok := id3Cache.Load(path); ok {
-		if s := v.(string); s != "" {
-			return s
-		}
+	if IsHTTPStream(path) {
 		return fallback
 	}
-	name := ""
-	if !IsHTTPStream(path) {
-		if t, err := ReadTags(path); err == nil && (t.Artist != "" || t.Title != "") {
-			artist, title := t.Artist, t.Title
-			if artist == "" {
-				artist = "Unknown Artist"
+	if entry, ok := cachedEntry(path); ok {
+		metadata.Lock()
+		profile := metadata.profile
+		metadata.Unlock()
+		if entry.Name != nil && entry.Profile == profile {
+			if *entry.Name != "" {
+				return *entry.Name
 			}
-			if title == "" {
-				title = "Unknown Title"
-			}
-			name = "[ID3] " + artist + " - " + title
+			return fallback
 		}
 	}
-	id3Cache.Store(path, name)
+	name := ""
+	if t, err := ReadTags(path); err == nil && (t.Artist != "" || t.Title != "") {
+		artist, title := t.Artist, t.Title
+		if artist == "" {
+			artist = "Unknown Artist"
+		}
+		if title == "" {
+			title = "Unknown Title"
+		}
+		name = "[ID3] " + artist + " - " + title
+	}
+	storeEntry(path, func(entry *metadataEntry) {
+		entry.Name = &name
+		entry.Profile = metadata.profile
+	})
 	if name == "" {
 		return fallback
 	}
@@ -162,4 +263,4 @@ func ID3Name(path, fallback string) string {
 }
 
 // ForgetID3 drops a cached ID3 name (e.g. after a rename).
-func ForgetID3(path string) { id3Cache.Delete(path) }
+func ForgetID3(path string) { forgetMetadata(path) }

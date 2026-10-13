@@ -9,6 +9,7 @@ import (
 
 	"github.com/mingcheng/mp3blasterr/internal/filemanager"
 	"github.com/mingcheng/mp3blasterr/internal/playback"
+	"github.com/mingcheng/mp3blasterr/internal/playlist"
 )
 
 func TestSaveSettingsUpdatesInPlace(t *testing.T) {
@@ -202,6 +203,7 @@ func TestStateSettingsRoundTrip(t *testing.T) {
 	o := Default()
 	o.Theme, o.NerdFont, o.Wrap, o.Threads = "modern", true, false, 300
 	o.SortMode, o.PlayMode, o.Repeat = filemanager.SortSizeBig, playback.PlaySongs, true
+	o.DisplayMode, o.FileDisplayMode = playlist.DisplayID3, filemanager.DisplayPlain
 	o.FadeOut = true
 	o.Volume, o.Balance = 42, 60
 	o.LastDir, o.LastSong, o.LastPosition = "/music", "/music/a, b #1: 'x'.mp3", 95
@@ -209,7 +211,7 @@ func TestStateSettingsRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	before := Default().StateSettings()
 	changed := ChangedSettings(before, o.StateSettings())
-	if len(changed) != 13 {
+	if len(changed) != 15 {
 		t.Fatalf("changed %v", changed)
 	}
 	if err := SaveSettings(path, changed); err != nil {
@@ -235,6 +237,7 @@ func TestStateSettingsRoundTrip(t *testing.T) {
 func TestStateKeywordErrors(t *testing.T) {
 	for _, in := range []string{
 		"playback: {volume: 101}", "playback: {balance: -1}", "playback: {play_mode: sometimes}",
+		"ui: {display_mode: sometimes}", "files: {display_mode: sometimes}",
 		"playback: {fade_seconds: -1}", "playback: {fade_out: maybe}",
 		"state: {last_position: -5}", "state: {save: maybe}",
 	} {

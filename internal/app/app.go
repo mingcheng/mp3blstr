@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -81,6 +82,7 @@ const (
 // Row is a line of the main window.
 type Row struct {
 	Text    string
+	Right   string
 	Kind    RowKind
 	Marked  bool
 	Playing bool
@@ -135,9 +137,12 @@ type App struct {
 	search    string
 	searchGen int // invalidates the timeouts of earlier keystrokes
 
-	statusFile string
-	statusSig  string // last state written to statusFile
-	mainWidth  int    // columns of the main window, for panning
+	statusFile    string
+	statusSig     string // last state written to statusFile
+	mainWidth     int    // columns of the main window, for panning
+	durations     map[string]int
+	durationQueue []string
+	durationBusy  bool
 
 	view View
 	log  *slog.Logger
@@ -178,6 +183,7 @@ func New(d Deps) *App {
 		Mode:       keys.ModeNormal,
 		HelpBar:    listview.State{Rows: helpBarRows},
 		views:      map[*playlist.Group]*groupView{},
+		durations:  map[string]int{},
 		fmDir:      d.StartDir,
 		startDir:   d.StartDir,
 		statusFile: d.StatusFile,
@@ -400,12 +406,52 @@ func (a *App) MainRow(i int) Row {
 			r.Kind = RowParent
 		default:
 			r.Kind = RowSong
+			if !media.IsHTTPStream(it.Path) {
+				switch a.groupView(a.Cur).display {
+				case playlist.DisplayFileName:
+					if info, err := os.Stat(it.Path); err == nil {
+						r.Right = filemanager.SizeDesc(info.Size())
+					}
+				case playlist.DisplayID3:
+					if seconds, ok := a.durations[it.Path]; ok {
+						if seconds >= 0 {
+							r.Right = fmt.Sprintf("%d:%02d", seconds/60, seconds%60)
+							if seconds >= 3600 {
+								r.Right = fmt.Sprintf("%d:%02d:%02d", seconds/3600, seconds%3600/60, seconds%60)
+							}
+						}
+					} else {
+						a.durations[it.Path] = -1
+						a.durationQueue = append(a.durationQueue, it.Path)
+						a.loadNextDuration()
+					}
+				}
+			}
 			if p, _, ok := a.Player.SongInfo(); ok && a.Player.HasSong() && p == it.Path {
 				r.Playing = true
 			}
 		}
 		return r
 	}
+}
+
+func (a *App) loadNextDuration() {
+	if a.durationBusy || len(a.durationQueue) == 0 {
+		return
+	}
+	path := a.durationQueue[0]
+	a.durationQueue = a.durationQueue[1:]
+	a.durationBusy = true
+	go func() {
+		seconds, err := media.CachedDuration(path, audio.Duration)
+		a.view.Post(func() {
+			if err == nil {
+				a.durations[path] = seconds
+			}
+			a.durationBusy = false
+			a.loadNextDuration()
+		})
+	}()
 }
 
 // --- status area --------------------------------------------------------------

@@ -17,6 +17,7 @@ import (
 	"github.com/mingcheng/mp3blasterr/internal/listview"
 	"github.com/mingcheng/mp3blasterr/internal/media"
 	"github.com/mingcheng/mp3blasterr/internal/playback"
+	"github.com/mingcheng/mp3blasterr/internal/playlist"
 )
 
 // valueType is the type of a configuration value, checked before the value
@@ -119,12 +120,13 @@ func nonNegative(n int) bool { return n >= 0 }
 // keysSection) are handled separately.
 func keywords(o *Options) map[string]keyword {
 	kw := map[string]keyword{
-		"ui.theme":       parsedKw(&o.Theme, ParseTheme),
-		"ui.nerd_font":   boolKw(&o.NerdFont),
-		"ui.mouse":       boolKw(&o.Mouse),
-		"ui.list_width":  parsedKw(&o.ListWidth, listview.ParseWidth),
-		"ui.wrap_around": boolKw(&o.Wrap),
-		"ui.pan_size":    numberKw(&o.PanSize, func(n int) bool { return n >= 1 && n <= 40 }),
+		"ui.theme":        parsedKw(&o.Theme, ParseTheme),
+		"ui.nerd_font":    boolKw(&o.NerdFont),
+		"ui.mouse":        boolKw(&o.Mouse),
+		"ui.list_width":   parsedKw(&o.ListWidth, listview.ParseWidth),
+		"ui.display_mode": parsedKw(&o.DisplayMode, playlist.ParseDisplayMode),
+		"ui.wrap_around":  boolKw(&o.Wrap),
+		"ui.pan_size":     numberKw(&o.PanSize, func(n int) bool { return n >= 1 && n <= 40 }),
 
 		"playback.play_mode":    parsedKw(&o.PlayMode, playback.ParsePlayMode),
 		"playback.repeat":       boolKw(&o.Repeat),
@@ -143,8 +145,11 @@ func keywords(o *Options) map[string]keyword {
 		"playback.balance":        numberKw(&o.Balance, percent),
 
 		"files.sort_mode":         parsedKw(&o.SortMode, filemanager.ParseSortMode),
+		"files.display_mode":      parsedKw(&o.FileDisplayMode, filemanager.ParseDisplayMode),
 		"files.hide_others":       boolKw(&o.HideOthers),
 		"files.id3_names":         boolKw(&o.ID3Names),
+		"files.guess_legacy_tags": boolKw(&o.GuessLegacyTags),
+		"files.metadata_cache":    boolKw(&o.MetadataCache),
 		"files.scan_mp3":          boolKw(&o.ScanMP3),
 		"files.playlist_dir":      pathKw(&o.PlaylistDir),
 		"files.audio_patterns":    listKw(&o.AudioPatterns),

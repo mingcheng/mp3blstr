@@ -3,7 +3,10 @@
 // to play groups in order or shuffled.
 package playlist
 
-import "github.com/mingcheng/mp3blasterr/internal/media"
+import (
+	"fmt"
+	"github.com/mingcheng/mp3blasterr/internal/media"
+)
 
 // Kind distinguishes the entries of a group.
 type Kind int
@@ -444,6 +447,30 @@ const (
 
 // Next returns the following display mode (wrapping around).
 func (m DisplayMode) Next() DisplayMode { return (m + 1) % numDisplayModes }
+
+func (m DisplayMode) String() string {
+	switch m {
+	case DisplayPath:
+		return "path"
+	case DisplayID3:
+		return "id3"
+	default:
+		return "filename"
+	}
+}
+
+func ParseDisplayMode(s string) (DisplayMode, error) {
+	switch s {
+	case "path":
+		return DisplayPath, nil
+	case "filename":
+		return DisplayFileName, nil
+	case "id3":
+		return DisplayID3, nil
+	default:
+		return 0, fmt.Errorf("unknown display mode %q", s)
+	}
+}
 
 // DisplayName returns the text shown for entry it in display mode mode.
 // Groups always show their title.

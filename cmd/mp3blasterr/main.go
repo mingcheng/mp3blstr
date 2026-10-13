@@ -6,6 +6,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"log/slog"
@@ -153,13 +154,24 @@ func printVersion() {
 // setupMedia installs the tag recoder (CharsetTable) and returns the
 // matcher recognising audio files and playlists.
 func setupMedia(opts *config.Options) (*media.Matcher, error) {
+	media.SetGuessLegacyTags(opts.GuessLegacyTags)
+	profile := fmt.Sprintf("%t:%s", opts.GuessLegacyTags, opts.CharsetTable)
 	if opts.CharsetTable != "" {
-		rec, err := media.LoadRecodeTable(media.ExpandPath(opts.CharsetTable))
+		path := media.ExpandPath(opts.CharsetTable)
+		rec, err := media.LoadRecodeTable(path)
 		if err != nil {
 			return nil, err
 		}
 		media.SetRecoder(rec)
+		if data, err := os.ReadFile(path); err == nil {
+			profile += fmt.Sprintf(":%x", sha256.Sum256(data))
+		}
 	}
+	cacheDir := ""
+	if opts.MetadataCache {
+		cacheDir = filepath.Join(config.Dir(), "cache")
+	}
+	media.ConfigureMetadataCache(cacheDir, profile)
 	m, err := media.NewMatcher(opts.AudioPatterns, opts.PlaylistPatterns)
 	if err != nil {
 		return nil, fmt.Errorf("invalid AudiofileMatching/PlaylistMatching: %w", err)

@@ -14,6 +14,7 @@ ui:
   #                          # percentage of the terminal (min. 60 columns),
   #                          # a number of columns, or 0 = terminal width - 12
   #                          # (original behaviour)
+  # display_mode: filename  # playlist: path, filename or id3 (toggle: f)
   # wrap_around: true        # moving past the end of a list wraps around
   # pan_size: 5              # columns panned by left/right (1..40)
 
@@ -48,8 +49,13 @@ playback:
 files:
   # sort_mode: alpha         # alpha, alpha-case, modify-new, modify-old,
   #                          # size-small, size-big, none
+  # display_mode: size       # file manager: plain, size or id3 (toggle: f)
   # hide_others: false       # hide files that are neither audio nor playlists
-  # id3_names: false
+  # id3_names: false         # legacy default for file manager ID3 display
+  # guess_legacy_tags: false # guess mislabeled UTF-8/GBK/GB18030 ID3 text;
+  #                          # opt in: detection costs time on large lists
+  # metadata_cache: true     # cache ID3 names and durations under ~/.config/mp3blasterr/cache;
+  #                          # false disables persistent metadata caching
   # scan_mp3: false
   # playlist_dir: ~/playlists  # default: your home directory
   # audio_patterns: ['\.mp[123]$', '\.wav$', '\.ogg$', '\.oga$', '\.flac$', '^https?://']
@@ -62,8 +68,8 @@ selection:                   # select/deselect items by pattern (+ and -)
   # case_insensitive: true
 
 # Session state. On exit mp3blasterr writes the settings changed during the
-# session back into this file (theme, nerd_font, wrap_around, threads,
-# sort_mode, play_mode, repeat, fade_out, volume, balance and the settings below):
+# session back into this file (theme, nerd_font, wrap_around, display modes,
+# threads, sort_mode, play_mode, repeat, fade_out, volume, balance and the settings below):
 # existing values are updated in place, new ones are added to their
 # section; comments and blank lines are kept. Command line options are not
 # saved. The playlist is kept in ~/.config/mp3blasterr/session.lst and

@@ -270,6 +270,30 @@ const (
 // Next returns the following display mode (wrapping around).
 func (d DisplayMode) Next() DisplayMode { return (d + 1) % numDisplayModes }
 
+func (d DisplayMode) String() string {
+	switch d {
+	case DisplayPlain:
+		return "plain"
+	case DisplayID3:
+		return "id3"
+	default:
+		return "size"
+	}
+}
+
+func ParseDisplayMode(s string) (DisplayMode, error) {
+	switch s {
+	case "plain":
+		return DisplayPlain, nil
+	case "size":
+		return DisplaySize, nil
+	case "id3":
+		return DisplayID3, nil
+	default:
+		return 0, fmt.Errorf("unknown file display mode %q", s)
+	}
+}
+
 // DisplayName returns the text for entry i in display mode mode.
 // Directories always show their name.
 func (m *Manager) DisplayName(i int, mode DisplayMode) string {

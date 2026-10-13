@@ -131,8 +131,11 @@ func (a *App) Exec(cmd keys.Command) {
 		case keys.ModeNormal:
 			gv := a.groupView(a.Cur)
 			gv.display = gv.display.Next()
+			a.Opts.DisplayMode = gv.display
 		case keys.ModeFileSelection:
 			a.fmDisplay = a.fmDisplay.Next()
+			a.Opts.FileDisplayMode = a.fmDisplay
+			a.Opts.ID3Names = false
 		}
 	case keys.CmdSelectFiles:
 		a.fmBegin()
