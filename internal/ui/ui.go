@@ -1,4 +1,4 @@
-// Package ui renders mp3blasterr with tview/tcell: a single root primitive
+// Package ui renders mp3blstr with tview/tcell: a single root primitive
 // draws the classic screen layout, handles the keyboard and maps mouse
 // clicks, double clicks, right clicks and the wheel onto commands.
 package ui
@@ -8,9 +8,9 @@ import (
 
 	"github.com/rivo/tview"
 
-	"github.com/mingcheng/mp3blasterr/internal/app"
-	"github.com/mingcheng/mp3blasterr/internal/listview"
-	"github.com/mingcheng/mp3blasterr/internal/ui/theme"
+	"github.com/mingcheng/mp3blstr/internal/app"
+	"github.com/mingcheng/mp3blstr/internal/listview"
+	"github.com/mingcheng/mp3blstr/internal/ui/theme"
 )
 
 // Options configure the user interface.

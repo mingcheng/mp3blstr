@@ -6,7 +6,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 
-	"github.com/mingcheng/mp3blasterr/internal/keys"
+	"github.com/mingcheng/mp3blstr/internal/keys"
 )
 
 // Task is a long running operation (such as scanning directories) that runs

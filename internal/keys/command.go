@@ -1,4 +1,4 @@
-// Package keys defines the commands understood by mp3blasterr, the program
+// Package keys defines the commands understood by mp3blstr, the program
 // modes in which they are valid and the (re)configurable key bindings that
 // trigger them.
 package keys

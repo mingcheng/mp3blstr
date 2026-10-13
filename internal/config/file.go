@@ -12,12 +12,12 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/mingcheng/mp3blasterr/internal/filemanager"
-	"github.com/mingcheng/mp3blasterr/internal/keys"
-	"github.com/mingcheng/mp3blasterr/internal/listview"
-	"github.com/mingcheng/mp3blasterr/internal/media"
-	"github.com/mingcheng/mp3blasterr/internal/playback"
-	"github.com/mingcheng/mp3blasterr/internal/playlist"
+	"github.com/mingcheng/mp3blstr/internal/filemanager"
+	"github.com/mingcheng/mp3blstr/internal/keys"
+	"github.com/mingcheng/mp3blstr/internal/listview"
+	"github.com/mingcheng/mp3blstr/internal/media"
+	"github.com/mingcheng/mp3blstr/internal/playback"
+	"github.com/mingcheng/mp3blstr/internal/playlist"
 )
 
 // valueType is the type of a configuration value, checked before the value
@@ -204,9 +204,9 @@ func parseBool(s string) (v, ok bool) {
 
 // Dir returns the directory holding the configuration file and other
 // resources such as temporary data, caches and logs
-// ($HOME/.config/mp3blasterr).
+// ($HOME/.config/mp3blstr).
 func Dir() string {
-	return filepath.Join(media.HomeDir(), ".config", "mp3blasterr")
+	return filepath.Join(media.HomeDir(), ".config", "mp3blstr")
 }
 
 // EnsureDir creates Dir if it does not exist yet and returns it.
@@ -219,7 +219,7 @@ func EnsureDir() (string, error) {
 }
 
 // DefaultPath returns the default configuration file
-// ($HOME/.config/mp3blasterr/config.yaml).
+// ($HOME/.config/mp3blstr/config.yaml).
 func DefaultPath() string {
 	return filepath.Join(Dir(), "config.yaml")
 }

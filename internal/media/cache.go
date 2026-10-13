@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/mingcheng/mp3blasterr/internal/atomicfile"
+	"github.com/mingcheng/mp3blstr/internal/atomicfile"
 )
 
 type metadataEntry struct {

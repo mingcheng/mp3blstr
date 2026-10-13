@@ -5,142 +5,134 @@ package mediakeys
 import (
 	"fmt"
 	"os"
-	"sync"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
+	"github.com/godbus/dbus/v5/prop"
 )
 
-const playerPath = dbus.ObjectPath("/org/mpris/MediaPlayer2")
+const (
+	playerPath  = dbus.ObjectPath("/org/mpris/MediaPlayer2")
+	rootIface   = "org.mpris.MediaPlayer2"
+	playerIface = "org.mpris.MediaPlayer2.Player"
+)
 
 func playerName() string {
-	return fmt.Sprintf("org.mpris.MediaPlayer2.mp3blasterr.instance%d", os.Getpid())
+	return fmt.Sprintf("org.mpris.MediaPlayer2.mp3blstr.instance%d", os.Getpid())
 }
 
+// root implements the org.mpris.MediaPlayer2 methods.
+type root struct{}
+
+func (root) Raise() *dbus.Error { return nil }
+func (root) Quit() *dbus.Error  { return nil }
+
+// player implements the org.mpris.MediaPlayer2.Player methods. Seek is
+// renamed on export (see playerMethods) to keep go vet's io.Seeker check quiet.
+type player struct{ post func(Action) }
+
+func (p player) PlayPause() *dbus.Error                       { p.post(PlayPause); return nil }
+func (p player) Play() *dbus.Error                            { p.post(Play); return nil }
+func (p player) Pause() *dbus.Error                           { p.post(Pause); return nil }
+func (p player) Next() *dbus.Error                            { p.post(Next); return nil }
+func (p player) Previous() *dbus.Error                        { p.post(Previous); return nil }
+func (p player) Stop() *dbus.Error                            { p.post(Stop); return nil }
+func (player) SeekMPRIS(int64) *dbus.Error                    { return nil }
+func (player) SetPosition(dbus.ObjectPath, int64) *dbus.Error { return nil }
+func (player) OpenUri(string) *dbus.Error                     { return nil }
+
+var playerMethods = map[string]string{"SeekMPRIS": "Seek"}
+
 type mpris struct {
-	conn   *dbus.Conn
-	post   func(Action)
-	mu     sync.RWMutex
-	status string
+	conn  *dbus.Conn
+	props *prop.Properties
 }
+
+func constant(v any) *prop.Prop { return &prop.Prop{Value: v, Emit: prop.EmitConst} }
 
 func Start(post func(Action)) (Controller, error) {
 	conn, err := dbus.ConnectSessionBus()
 	if err != nil {
 		return nil, err
 	}
-	player := &mpris{conn: conn, post: post, status: "Stopped"}
-	for _, iface := range []string{"org.mpris.MediaPlayer2", "org.mpris.MediaPlayer2.Player", "org.freedesktop.DBus.Properties"} {
-		var err error
-		if iface == "org.mpris.MediaPlayer2.Player" {
-			err = conn.ExportWithMap(player, map[string]string{"SeekMPRIS": "Seek"}, playerPath, iface)
-		} else {
-			err = conn.Export(player, playerPath, iface)
-		}
-		if err != nil {
-			conn.Close()
-			return nil, err
+	c, err := export(conn, post)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+	return c, nil
+}
+
+func export(conn *dbus.Conn, post func(Action)) (*mpris, error) {
+	p := player{post}
+	if err := conn.Export(root{}, playerPath, rootIface); err != nil {
+		return nil, err
+	}
+	if err := conn.ExportWithMap(p, playerMethods, playerPath, playerIface); err != nil {
+		return nil, err
+	}
+	props, err := prop.Export(conn, playerPath, prop.Map{
+		rootIface: {
+			"Identity":            constant("mp3blstr"),
+			"CanQuit":             constant(false),
+			"CanRaise":            constant(false),
+			"HasTrackList":        constant(false),
+			"SupportedUriSchemes": constant([]string{}),
+			"SupportedMimeTypes":  constant([]string{}),
+		},
+		playerIface: {
+			"PlaybackStatus": {Value: "Stopped", Emit: prop.EmitTrue},
+			"LoopStatus":     constant("None"),
+			"Rate":           constant(1.0),
+			"Shuffle":        constant(false),
+			"Metadata":       constant(map[string]dbus.Variant{}),
+			"Volume":         constant(1.0),
+			"Position":       {Value: int64(0), Emit: prop.EmitFalse},
+			"MinimumRate":    constant(1.0),
+			"MaximumRate":    constant(1.0),
+			"CanGoNext":      constant(true),
+			"CanGoPrevious":  constant(true),
+			"CanPlay":        constant(true),
+			"CanPause":       constant(true),
+			"CanSeek":        constant(false),
+			"CanControl":     constant(true),
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	methods := introspect.Methods(p)
+	for i, m := range methods {
+		if name, ok := playerMethods[m.Name]; ok {
+			methods[i].Name = name
 		}
 	}
-	if err := conn.Export(introspect.NewIntrospectable(&introspect.Node{
+	node := &introspect.Node{
 		Name: string(playerPath),
 		Interfaces: []introspect.Interface{
-			{Name: "org.mpris.MediaPlayer2", Methods: []introspect.Method{{Name: "Raise"}, {Name: "Quit"}}},
-			{Name: "org.mpris.MediaPlayer2.Player", Methods: []introspect.Method{
-				{Name: "Next"}, {Name: "Previous"}, {Name: "Pause"}, {Name: "PlayPause"},
-				{Name: "Stop"}, {Name: "Play"},
-			}},
 			introspect.IntrospectData,
+			prop.IntrospectData,
+			{Name: rootIface, Methods: introspect.Methods(root{}), Properties: props.Introspection(rootIface)},
+			{Name: playerIface, Methods: methods, Properties: props.Introspection(playerIface)},
 		},
-	}), playerPath, "org.freedesktop.DBus.Introspectable"); err != nil {
-		conn.Close()
+	}
+	if err := conn.Export(introspect.NewIntrospectable(node), playerPath, "org.freedesktop.DBus.Introspectable"); err != nil {
 		return nil, err
 	}
 	reply, err := conn.RequestName(playerName(), dbus.NameFlagDoNotQueue)
 	if err != nil || reply != dbus.RequestNameReplyPrimaryOwner {
-		conn.Close()
 		return nil, fmt.Errorf("MPRIS name unavailable: %v (%v)", reply, err)
 	}
-	return player, nil
+	return &mpris{conn: conn, props: props}, nil
 }
 
 func (m *mpris) Close() error { return m.conn.Close() }
 
 func (m *mpris) Update(status string) {
-	m.mu.Lock()
-	if m.status == status {
-		m.mu.Unlock()
-		return
+	// SetMust panics when the change signal cannot be sent, e.g. after the
+	// session bus went away; media keys must never take the player down.
+	defer func() { _ = recover() }()
+	if m.props.GetMust(playerIface, "PlaybackStatus") != status {
+		m.props.SetMust(playerIface, "PlaybackStatus", status)
 	}
-	m.status = status
-	m.mu.Unlock()
-	_ = m.conn.Emit(playerPath, "org.freedesktop.DBus.Properties.PropertiesChanged", "org.mpris.MediaPlayer2.Player", map[string]dbus.Variant{"PlaybackStatus": dbus.MakeVariant(status)}, []string{})
-}
-
-func (m *mpris) PlayPause() *dbus.Error                         { m.post(PlayPause); return nil }
-func (m *mpris) Play() *dbus.Error                              { m.post(Play); return nil }
-func (m *mpris) Pause() *dbus.Error                             { m.post(Pause); return nil }
-func (m *mpris) Next() *dbus.Error                              { m.post(Next); return nil }
-func (m *mpris) Previous() *dbus.Error                          { m.post(Previous); return nil }
-func (m *mpris) Stop() *dbus.Error                              { m.post(Stop); return nil }
-func (m *mpris) SeekMPRIS(int64) *dbus.Error                    { return nil }
-func (m *mpris) SetPosition(dbus.ObjectPath, int64) *dbus.Error { return nil }
-func (m *mpris) OpenUri(string) *dbus.Error                     { return nil }
-func (m *mpris) Raise() *dbus.Error                             { return nil }
-func (m *mpris) Quit() *dbus.Error                              { return nil }
-
-func (m *mpris) Get(iface, name string) (dbus.Variant, *dbus.Error) {
-	properties := m.properties(iface)
-	if value, ok := properties[name]; ok {
-		return value, nil
-	}
-	return dbus.Variant{}, dbus.NewError("org.freedesktop.DBus.Error.UnknownProperty", []any{name})
-}
-
-func (m *mpris) GetAll(iface string) (map[string]dbus.Variant, *dbus.Error) {
-	properties := m.properties(iface)
-	if properties == nil {
-		return nil, dbus.NewError("org.freedesktop.DBus.Error.UnknownInterface", []any{iface})
-	}
-	return properties, nil
-}
-
-func (m *mpris) Set(iface, name string, value dbus.Variant) *dbus.Error {
-	return dbus.NewError("org.freedesktop.DBus.Error.PropertyReadOnly", []any{name})
-}
-
-func (m *mpris) properties(iface string) map[string]dbus.Variant {
-	switch iface {
-	case "org.mpris.MediaPlayer2":
-		return map[string]dbus.Variant{
-			"Identity":            dbus.MakeVariant("mp3blasterr"),
-			"CanQuit":             dbus.MakeVariant(false),
-			"CanRaise":            dbus.MakeVariant(false),
-			"HasTrackList":        dbus.MakeVariant(false),
-			"SupportedUriSchemes": dbus.MakeVariant([]string{}),
-			"SupportedMimeTypes":  dbus.MakeVariant([]string{}),
-		}
-	case "org.mpris.MediaPlayer2.Player":
-		m.mu.RLock()
-		status := m.status
-		m.mu.RUnlock()
-		return map[string]dbus.Variant{
-			"PlaybackStatus": dbus.MakeVariant(status),
-			"LoopStatus":     dbus.MakeVariant("None"),
-			"Rate":           dbus.MakeVariant(1.0),
-			"Shuffle":        dbus.MakeVariant(false),
-			"Metadata":       dbus.MakeVariant(map[string]dbus.Variant{}),
-			"Volume":         dbus.MakeVariant(1.0),
-			"Position":       dbus.MakeVariant(int64(0)),
-			"MinimumRate":    dbus.MakeVariant(1.0),
-			"MaximumRate":    dbus.MakeVariant(1.0),
-			"CanGoNext":      dbus.MakeVariant(true),
-			"CanGoPrevious":  dbus.MakeVariant(true),
-			"CanPlay":        dbus.MakeVariant(true),
-			"CanPause":       dbus.MakeVariant(true),
-			"CanSeek":        dbus.MakeVariant(false),
-			"CanControl":     dbus.MakeVariant(true),
-		}
-	}
-	return nil
 }

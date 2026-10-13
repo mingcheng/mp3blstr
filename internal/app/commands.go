@@ -5,10 +5,10 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 
-	"github.com/mingcheng/mp3blasterr/internal/config"
-	"github.com/mingcheng/mp3blasterr/internal/keys"
-	"github.com/mingcheng/mp3blasterr/internal/listview"
-	"github.com/mingcheng/mp3blasterr/internal/playlist"
+	"github.com/mingcheng/mp3blstr/internal/config"
+	"github.com/mingcheng/mp3blstr/internal/keys"
+	"github.com/mingcheng/mp3blstr/internal/listview"
+	"github.com/mingcheng/mp3blstr/internal/playlist"
 )
 
 // HandleKey processes a key press. While a popup, a search or a task is
@@ -68,14 +68,14 @@ func (a *App) Exec(cmd keys.Command) {
 		}
 	case keys.CmdQuitProgram:
 		if a.Opts.ConfirmQuit {
-			a.openConfirm([]string{"Quit mp3blasterr?"}, a.Quit)
+			a.openConfirm([]string{"Quit mp3blstr?"}, a.Quit)
 		} else {
 			a.Quit()
 		}
 	case keys.CmdHelp:
 		if a.Mode == keys.ModeHelp {
 			a.setMode(keys.ModeNormal)
-			a.SetMessage("Visit https://github.com/mingcheng/mp3blasterr")
+			a.SetMessage("Visit https://github.com/mingcheng/mp3blstr")
 		} else {
 			a.setMode(keys.ModeHelp)
 			a.SetMessage("Press '?' to exit help screen.")

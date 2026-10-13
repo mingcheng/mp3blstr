@@ -13,8 +13,8 @@ import (
 	"math/rand/v2"
 	"strings"
 
-	"github.com/mingcheng/mp3blasterr/internal/media"
-	"github.com/mingcheng/mp3blasterr/internal/playlist"
+	"github.com/mingcheng/mp3blstr/internal/media"
+	"github.com/mingcheng/mp3blstr/internal/playlist"
 )
 
 // PlayMode is the global playback mode.

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/mingcheng/mp3blasterr/internal/media"
+	"github.com/mingcheng/mp3blstr/internal/media"
 )
 
 func touch(t *testing.T, p string, size int) {

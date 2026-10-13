@@ -1,5 +1,5 @@
-// Package config holds mp3blasterr's global options and reads them from the
-// $HOME/.config/mp3blasterr/config.yaml configuration file and from the
+// Package config holds mp3blstr's global options and reads them from the
+// $HOME/.config/mp3blstr/config.yaml configuration file and from the
 // command line.
 package config
 
@@ -10,12 +10,12 @@ import (
 
 	"github.com/adrg/xdg"
 
-	"github.com/mingcheng/mp3blasterr/internal/filemanager"
-	"github.com/mingcheng/mp3blasterr/internal/keys"
-	"github.com/mingcheng/mp3blasterr/internal/listview"
-	"github.com/mingcheng/mp3blasterr/internal/media"
-	"github.com/mingcheng/mp3blasterr/internal/playback"
-	"github.com/mingcheng/mp3blasterr/internal/playlist"
+	"github.com/mingcheng/mp3blstr/internal/filemanager"
+	"github.com/mingcheng/mp3blstr/internal/keys"
+	"github.com/mingcheng/mp3blstr/internal/listview"
+	"github.com/mingcheng/mp3blstr/internal/media"
+	"github.com/mingcheng/mp3blstr/internal/playback"
+	"github.com/mingcheng/mp3blstr/internal/playlist"
 )
 
 // KeyBinding is a key rebinding read from the configuration file.

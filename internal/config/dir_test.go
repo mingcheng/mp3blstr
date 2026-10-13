@@ -16,7 +16,7 @@ func setHome(t *testing.T) string {
 
 func TestDirAndDefaultPath(t *testing.T) {
 	home := setHome(t)
-	want := filepath.Join(home, ".config", "mp3blasterr")
+	want := filepath.Join(home, ".config", "mp3blstr")
 	if got := Dir(); got != want {
 		t.Fatalf("Dir() = %q, want %q", got, want)
 	}

@@ -1,4 +1,4 @@
-// Package app implements mp3blasterr's behaviour independently of the
+// Package app implements mp3blstr's behaviour independently of the
 // terminal toolkit: program modes, the command set, popups, the playlist
 // window, the file manager and the help screen. The ui package renders this
 // state and feeds key presses and mouse clicks into it.
@@ -14,14 +14,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mingcheng/mp3blasterr/internal/audio"
-	"github.com/mingcheng/mp3blasterr/internal/config"
-	"github.com/mingcheng/mp3blasterr/internal/filemanager"
-	"github.com/mingcheng/mp3blasterr/internal/keys"
-	"github.com/mingcheng/mp3blasterr/internal/listview"
-	"github.com/mingcheng/mp3blasterr/internal/media"
-	"github.com/mingcheng/mp3blasterr/internal/playback"
-	"github.com/mingcheng/mp3blasterr/internal/playlist"
+	"github.com/mingcheng/mp3blstr/internal/audio"
+	"github.com/mingcheng/mp3blstr/internal/config"
+	"github.com/mingcheng/mp3blstr/internal/filemanager"
+	"github.com/mingcheng/mp3blstr/internal/keys"
+	"github.com/mingcheng/mp3blstr/internal/listview"
+	"github.com/mingcheng/mp3blstr/internal/media"
+	"github.com/mingcheng/mp3blstr/internal/playback"
+	"github.com/mingcheng/mp3blstr/internal/playlist"
 )
 
 //go:embed help.txt

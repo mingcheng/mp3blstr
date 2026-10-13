@@ -1,6 +1,6 @@
 package theme
 
-import "github.com/mingcheng/mp3blasterr/internal/playback"
+import "github.com/mingcheng/mp3blstr/internal/playback"
 
 // Glyphs are the symbols used by the interface.
 type Glyphs struct {

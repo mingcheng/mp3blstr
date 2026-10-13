@@ -12,7 +12,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/mingcheng/mp3blasterr/internal/atomicfile"
+	"github.com/mingcheng/mp3blstr/internal/atomicfile"
 )
 
 // Setting is a setting of the configuration file, named by its dotted path
@@ -23,12 +23,12 @@ type Setting struct {
 }
 
 // savedComment heads a configuration file created by SaveSettings.
-const savedComment = "Saved automatically by mp3blasterr on exit (state.save: false disables this)."
+const savedComment = "Saved automatically by mp3blstr on exit (state.save: false disables this)."
 
 // SessionPath returns the file holding the playlist of the last session.
 func SessionPath() string { return filepath.Join(Dir(), "session.lst") }
 
-// StateSettings returns the options that mp3blasterr remembers between
+// StateSettings returns the options that mp3blstr remembers between
 // sessions, as configuration file settings.
 func (o *Options) StateSettings() []Setting {
 	pos := ""

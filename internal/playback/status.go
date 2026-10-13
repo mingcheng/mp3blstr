@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/mingcheng/mp3blasterr/internal/media"
+	"github.com/mingcheng/mp3blstr/internal/media"
 )
 
 // statusNames are the "status" values of the status file.

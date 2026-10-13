@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mingcheng/mp3blasterr/internal/media"
+	"github.com/mingcheng/mp3blstr/internal/media"
 )
 
 // The sample configuration must parse as shipped and with all settings

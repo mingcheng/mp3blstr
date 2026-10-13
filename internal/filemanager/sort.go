@@ -1,4 +1,4 @@
-// Package filemanager implements the directory browser used in mp3blasterr's
+// Package filemanager implements the directory browser used in mp3blstr's
 // file selection mode.
 package filemanager
 

@@ -4,153 +4,140 @@ package mediakeys
 
 import (
 	"errors"
+	"os"
 	"runtime"
+	"sync"
+	"sync/atomic"
+	"unsafe"
 
 	"github.com/ebitengine/purego"
 	"github.com/ebitengine/purego/objc"
 )
 
-const (
-	systemDefinedEvent = 14
-	tapDisabledTimeout = 0xfffffffe
-	tapDisabledInput   = 0xffffffff
+// macOS routes media keys (and Control Center, headphones, …) to the current
+// "Now Playing" application through MPRemoteCommandCenter. This needs no
+// Accessibility or Input Monitoring permission, but the commands arrive on the
+// main dispatch queue, so the main thread has to run its run loop; see Main.
+
+// Keep main.main on the main thread so Main can run the main run loop.
+func init() { runtime.LockOSThread() }
+
+var (
+	mainLoopRunning atomic.Bool
+	mainQueue       uintptr
+	dispatchAsync   func(queue uintptr, block objc.Block)
+	pthreadMainNP   func() int32
 )
 
-type eventTap struct {
-	done    chan struct{}
-	stopped chan struct{}
+// Main runs fn and exits with its result. It must be called from main.main:
+// fn runs on another goroutine while the main thread runs the main run loop.
+func Main(fn func() int) {
+	run, err := loadMainLoop()
+	if err != nil || pthreadMainNP() != 1 {
+		os.Exit(fn())
+	}
+	mainLoopRunning.Store(true)
+	go func() { os.Exit(fn()) }()
+	// The main run loop always waits for the main dispatch queue, so this
+	// only returns if something stops it explicitly.
+	run()
+	select {}
 }
 
-type mediaKeyState struct {
-	held [Stop + 1]bool
+func loadMainLoop() (run func(), err error) {
+	libSystem, err := purego.Dlopen("/usr/lib/libSystem.B.dylib", purego.RTLD_NOW)
+	if err != nil {
+		return nil, err
+	}
+	cf, err := purego.Dlopen("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation", purego.RTLD_NOW)
+	if err != nil {
+		return nil, err
+	}
+	if mainQueue, err = purego.Dlsym(libSystem, "_dispatch_main_q"); err != nil {
+		return nil, err
+	}
+	purego.RegisterLibFunc(&pthreadMainNP, libSystem, "pthread_main_np")
+	purego.RegisterLibFunc(&dispatchAsync, libSystem, "dispatch_async")
+	purego.RegisterLibFunc(&run, cf, "CFRunLoopRun")
+	return run, nil
+}
+
+// onMain runs fn asynchronously on the main thread.
+func onMain(fn func()) {
+	block := objc.NewBlock(func(objc.Block) {
+		pool := objc.ID(objc.GetClass("NSAutoreleasePool")).Send(objc.RegisterName("new"))
+		defer pool.Send(objc.RegisterName("drain"))
+		fn()
+	})
+	dispatchAsync(mainQueue, block)
+	block.Release()
+}
+
+func onMainSync(fn func()) {
+	done := make(chan struct{})
+	onMain(func() {
+		defer close(done)
+		fn()
+	})
+	<-done
+}
+
+// MPNowPlayingPlaybackState values.
+const (
+	statePlaying = 1
+	statePaused  = 2
+	stateStopped = 3
+)
+
+// playbackState maps a playback status to MPNowPlayingPlaybackState. Stopped
+// is reported as paused: a stopped player stops receiving the play key.
+func playbackState(status string) uint64 {
+	if status == "Playing" {
+		return statePlaying
+	}
+	return statePaused
+}
+
+type commandTarget struct {
+	command, target objc.ID
+	block           objc.Block
+}
+
+type nowPlaying struct {
+	events  chan Action
+	done    chan struct{}
+	once    sync.Once
+	info    objc.ID
+	title   objc.ID
+	targets []commandTarget
+	closed  bool // main thread only
 }
 
 func Start(post func(Action)) (Controller, error) {
-	quartz, err := purego.Dlopen("/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices", purego.RTLD_NOW)
+	if !mainLoopRunning.Load() {
+		return nil, errors.New("macOS media keys need the main run loop (mediakeys.Main)")
+	}
+	mp, err := purego.Dlopen("/System/Library/Frameworks/MediaPlayer.framework/MediaPlayer", purego.RTLD_NOW)
 	if err != nil {
 		return nil, err
 	}
-	coreFoundation, err := purego.Dlopen("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation", purego.RTLD_NOW)
+	titleKey, err := purego.Dlsym(mp, "MPMediaItemPropertyTitle")
 	if err != nil {
 		return nil, err
 	}
-	if _, err := purego.Dlopen("/System/Library/Frameworks/AppKit.framework/AppKit", purego.RTLD_NOW); err != nil {
-		return nil, err
-	}
-
-	var trusted func() bool
-	var createTap func(uint32, uint32, uint32, uint64, uintptr, uintptr) uintptr
-	var enableTap func(uintptr, bool)
-	var makeSource func(uintptr, uintptr, int32) uintptr
-	var addSource func(uintptr, uintptr, uintptr)
-	var removeSource func(uintptr, uintptr, uintptr)
-	var currentRunLoop func() uintptr
-	var runInMode func(uintptr, float64, bool) int32
-	var createString func(uintptr, string, uint32) uintptr
-	var release func(uintptr)
-	purego.RegisterLibFunc(&trusted, quartz, "AXIsProcessTrusted")
-	purego.RegisterLibFunc(&createTap, quartz, "CGEventTapCreate")
-	purego.RegisterLibFunc(&enableTap, quartz, "CGEventTapEnable")
-	purego.RegisterLibFunc(&makeSource, coreFoundation, "CFMachPortCreateRunLoopSource")
-	purego.RegisterLibFunc(&addSource, coreFoundation, "CFRunLoopAddSource")
-	purego.RegisterLibFunc(&removeSource, coreFoundation, "CFRunLoopRemoveSource")
-	purego.RegisterLibFunc(&currentRunLoop, coreFoundation, "CFRunLoopGetCurrent")
-	purego.RegisterLibFunc(&runInMode, coreFoundation, "CFRunLoopRunInMode")
-	purego.RegisterLibFunc(&createString, coreFoundation, "CFStringCreateWithCString")
-	purego.RegisterLibFunc(&release, coreFoundation, "CFRelease")
-	if !trusted() {
-		return nil, errors.New("media keys require macOS Accessibility permission")
-	}
-	mode := createString(0, "kCFRunLoopDefaultMode", 0x08000100)
-	if mode == 0 {
-		return nil, errors.New("failed to create macOS run loop mode")
-	}
-
-	controls := &eventTap{done: make(chan struct{}), stopped: make(chan struct{})}
-	events := make(chan Action, 16)
-	ready := make(chan error, 1)
-	go func() {
-		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
-		defer close(controls.stopped)
-		defer release(mode)
-
-		eventWithCGEvent := objc.RegisterName("eventWithCGEvent:")
-		subtype := objc.RegisterName("subtype")
-		data1 := objc.RegisterName("data1")
-		alloc := objc.RegisterName("alloc")
-		init := objc.RegisterName("init")
-		drain := objc.RegisterName("drain")
-		poolClass := objc.ID(objc.GetClass("NSAutoreleasePool"))
-		eventClass := objc.ID(objc.GetClass("NSEvent"))
-		var keys mediaKeyState
-		var tap uintptr
-		callback := purego.NewCallback(func(_ uintptr, eventType uint32, event uintptr, _ uintptr) uintptr {
-			if eventType == tapDisabledTimeout || eventType == tapDisabledInput {
-				keys = mediaKeyState{}
-				enableTap(tap, true)
-				return event
-			}
-			if eventType != systemDefinedEvent {
-				return event
-			}
-			pool := poolClass.Send(alloc).Send(init)
-			defer pool.Send(drain)
-			nsEvent := eventClass.Send(eventWithCGEvent, objc.ID(event))
-			if nsEvent == 0 || objc.Send[int64](nsEvent, subtype) != 8 {
-				return event
-			}
-			if !keys.handle(uint32(objc.Send[int64](nsEvent, data1)), func(action Action) bool {
-				select {
-				case events <- action:
-					return true
-				default:
-					return false
-				}
-			}) {
-				return event
-			}
-			return 0
-		})
-		tap = createTap(1, 0, 0, uint64(1)<<systemDefinedEvent, callback, 0)
-		if tap == 0 {
-			ready <- errors.New("failed to create macOS media key event tap; check Input Monitoring permission")
-			return
-		}
-		defer release(tap)
-		source := makeSource(0, tap, 0)
-		if source == 0 {
-			ready <- errors.New("failed to create macOS media key run loop source")
-			return
-		}
-		defer release(source)
-		loop := currentRunLoop()
-		addSource(loop, source, mode)
-		defer removeSource(loop, source, mode)
-		enableTap(tap, true)
-		defer enableTap(tap, false)
-		ready <- nil
-		for {
-			select {
-			case <-controls.done:
-				return
-			default:
-				runInMode(mode, 0.1, false)
-			}
-		}
-	}()
-	if err := <-ready; err != nil {
-		<-controls.stopped
+	n := &nowPlaying{events: make(chan Action, 16), done: make(chan struct{})}
+	onMainSync(func() { err = n.register(**(**objc.ID)(unsafe.Pointer(&titleKey))) })
+	if err != nil {
 		return nil, err
 	}
 	go func() {
 		for {
 			select {
-			case <-controls.done:
+			case <-n.done:
 				return
-			case action := <-events:
+			case action := <-n.events:
 				select {
-				case <-controls.done:
+				case <-n.done:
 					return
 				default:
 					post(action)
@@ -158,52 +145,73 @@ func Start(post func(Action)) (Controller, error) {
 			}
 		}
 	}()
-	return controls, nil
+	return n, nil
 }
 
-func mediaAction(data uint32) (Action, bool, bool) {
-	key := data >> 16
-	state := (data >> 8) & 0xff
-	if state != 0x0a && state != 0x0b {
-		return 0, false, false
+func (n *nowPlaying) register(titleKey objc.ID) error {
+	center := objc.ID(objc.GetClass("MPRemoteCommandCenter")).Send(objc.RegisterName("sharedCommandCenter"))
+	n.info = objc.ID(objc.GetClass("MPNowPlayingInfoCenter")).Send(objc.RegisterName("defaultCenter"))
+	if center == 0 || n.info == 0 || titleKey == 0 {
+		return errors.New("macOS Now Playing controls are unavailable")
 	}
-	switch key {
-	case 16:
-		return PlayPause, state == 0x0a, true
-	case 17:
-		return Next, state == 0x0a, true
-	case 18:
-		return Previous, state == 0x0a, true
-	}
-	return 0, false, false
-}
-
-func (m *mediaKeyState) handle(data uint32, offer func(Action) bool) bool {
-	action, down, ok := mediaAction(data)
-	if !ok {
-		return false
-	}
-	if down {
-		if m.held[action] {
-			return true
+	addTarget := objc.RegisterName("addTargetWithHandler:")
+	for name, action := range map[string]Action{
+		"togglePlayPauseCommand": PlayPause,
+		"playCommand":            Play,
+		"pauseCommand":           Pause,
+		"nextTrackCommand":       Next,
+		"previousTrackCommand":   Previous,
+		"stopCommand":            Stop,
+	} {
+		command := center.Send(objc.RegisterName(name))
+		if command == 0 {
+			continue
 		}
-		if !offer(action) {
-			return false
-		}
-		m.held[action] = true
-		return true
+		block := objc.NewBlock(func(objc.Block, objc.ID) int64 {
+			select {
+			case n.events <- action:
+			default:
+			}
+			return 0 // MPRemoteCommandHandlerStatusSuccess
+		})
+		n.targets = append(n.targets, commandTarget{command, command.Send(addTarget, block), block})
 	}
-	if !m.held[action] {
-		return false
+	if len(n.targets) == 0 {
+		return errors.New("macOS Now Playing commands are unavailable")
 	}
-	m.held[action] = false
-	return true
+	// The title makes the player show up (and stay routable) in Now Playing.
+	n.title = objc.ID(objc.GetClass("NSDictionary")).Send(objc.RegisterName("dictionaryWithObject:forKey:"),
+		objc.ID(objc.GetClass("NSString")).Send(objc.RegisterName("stringWithUTF8String:"), "mp3blstr"), titleKey)
+	n.title.Send(objc.RegisterName("retain"))
+	n.setNowPlaying(n.title, statePaused)
+	return nil
 }
 
-func (*eventTap) Update(string) {}
+func (n *nowPlaying) setNowPlaying(info objc.ID, state uint64) {
+	n.info.Send(objc.RegisterName("setNowPlayingInfo:"), info)
+	n.info.Send(objc.RegisterName("setPlaybackState:"), state)
+}
 
-func (e *eventTap) Close() error {
-	close(e.done)
-	<-e.stopped
+func (n *nowPlaying) Update(status string) {
+	onMain(func() {
+		if !n.closed {
+			n.setNowPlaying(n.title, playbackState(status))
+		}
+	})
+}
+
+func (n *nowPlaying) Close() error {
+	n.once.Do(func() {
+		close(n.done)
+		onMainSync(func() {
+			n.closed = true
+			for _, t := range n.targets {
+				t.command.Send(objc.RegisterName("removeTarget:"), t.target)
+				t.block.Release()
+			}
+			n.setNowPlaying(0, stateStopped)
+			n.title.Send(objc.RegisterName("release"))
+		})
+	})
 	return nil
 }

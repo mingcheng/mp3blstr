@@ -5,7 +5,7 @@ import (
 	"github.com/rivo/tview"
 	"github.com/rivo/uniseg"
 
-	"github.com/mingcheng/mp3blasterr/internal/app"
+	"github.com/mingcheng/mp3blstr/internal/app"
 )
 
 // drawMain draws the main window: the title in its top border and the

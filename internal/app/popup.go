@@ -3,7 +3,7 @@ package app
 import (
 	"github.com/gdamore/tcell/v2"
 
-	"github.com/mingcheng/mp3blasterr/internal/keys"
+	"github.com/mingcheng/mp3blstr/internal/keys"
 )
 
 // The popups are modal: while one is open, HandleKey sends all keys to it.

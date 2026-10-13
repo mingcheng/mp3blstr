@@ -15,7 +15,7 @@ import (
 	"github.com/ebitengine/oto/v3"
 	"github.com/gopxl/beep/v2"
 
-	"github.com/mingcheng/mp3blasterr/internal/media"
+	"github.com/mingcheng/mp3blstr/internal/media"
 )
 
 // OutputRate is the sample rate of the audio device.
@@ -51,7 +51,7 @@ func (o *Output) init() error {
 			ChannelCount:    2,
 			Format:          oto.FormatFloat32LE,
 			BufferSize:      100 * time.Millisecond,
-			ApplicationName: "mp3blasterr",
+			ApplicationName: "mp3blstr",
 		})
 		if err != nil {
 			o.initErr = err

@@ -6,7 +6,7 @@ import (
 	"github.com/rivo/tview"
 	"github.com/rivo/uniseg"
 
-	"github.com/mingcheng/mp3blasterr/internal/keys"
+	"github.com/mingcheng/mp3blstr/internal/keys"
 )
 
 // drawMixer draws the mini mixer in the bottom right corner:

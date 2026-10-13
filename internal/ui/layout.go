@@ -1,6 +1,6 @@
 package ui
 
-import "github.com/mingcheng/mp3blasterr/internal/listview"
+import "github.com/mingcheng/mp3blstr/internal/listview"
 
 // Minimum terminal size this interface needs.
 const (

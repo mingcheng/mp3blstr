@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/mingcheng/mp3blasterr/internal/mediakeys"
+	"github.com/mingcheng/mp3blstr/internal/mediakeys"
 )
 
 type mediaPlayerFake struct {

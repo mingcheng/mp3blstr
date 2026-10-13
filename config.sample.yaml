@@ -1,4 +1,4 @@
-# mp3blasterr configuration file (copy to ~/.config/mp3blasterr/config.yaml).
+# mp3blstr configuration file (copy to ~/.config/mp3blstr/config.yaml).
 #
 # Settings are grouped in sections; setting names are snake_case. All
 # values shown are the defaults: uncomment a line (and the header of a
@@ -39,9 +39,7 @@ ui:
 playback:
   # play_mode: allgroups     # onegroup, allgroups or allrandom
   # media_keys: true         # global media controls (Linux MPRIS, Windows hotkeys,
-  #                          # macOS media keys); macOS requires Accessibility /
-  #                          # Input Monitoring permission for the terminal app;
-  #                          # false disables registration
+  #                          # macOS Now Playing); false disables registration
   # repeat: false
   # fade_out: false          # fade out at the end of known-length tracks (toggle: V)
   # fade_seconds: 5          # fade duration in seconds (config file only, 0 disables)
@@ -59,7 +57,7 @@ files:
   # id3_names: false         # legacy default for file manager ID3 display
   # guess_legacy_tags: false # guess mislabeled UTF-8/GBK/GB18030 ID3 text;
   #                          # opt in: detection costs time on large lists
-  # metadata_cache: true     # cache ID3 names and durations under ~/.config/mp3blasterr/cache;
+  # metadata_cache: true     # cache ID3 names and durations under ~/.config/mp3blstr/cache;
   #                          # false disables persistent metadata caching
   # scan_mp3: false
   # playlist_dir: ~/Music      # default: your Music folder (XDG_MUSIC_DIR); playlists are saved there as .m3u
@@ -72,12 +70,12 @@ selection:                   # select/deselect items by pattern (+ and -)
   # regex: false
   # case_insensitive: true
 
-# Session state. On exit mp3blasterr writes the settings changed during the
+# Session state. On exit mp3blstr writes the settings changed during the
 # session back into this file (theme, nerd_font, wrap_around, display modes,
 # threads, sort_mode, play_mode, repeat, fade_out, volume, balance and the settings below):
 # existing values are updated in place, new ones are added to their
 # section; comments and blank lines are kept. Command line options are not
-# saved. The playlist is kept in ~/.config/mp3blasterr/session.lst and
+# saved. The playlist is kept in ~/.config/mp3blstr/session.lst and
 # restored on the next start (unless files or a playlist are given on the
 # command line); the last song is then ready to continue at its position
 # with the play key.

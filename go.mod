@@ -1,4 +1,4 @@
-module github.com/mingcheng/mp3blasterr
+module github.com/mingcheng/mp3blstr
 
 go 1.27.2
 

@@ -1,4 +1,4 @@
-mp3blasterr: mp3blaster [r]eborned!
+mp3blstr is a modern re-implementation of the classic mp3blaster
 
 About
 =====
@@ -7,9 +7,9 @@ About
   Bram Avontuur:
       https://github.com/stragulus/mp3blaster
 
-  mp3blasterr is a Go re-implementation of mp3blaster by
-  mingcheng <mingcheng@outlook.com>:
-      https://github.com/mingcheng/mp3blasterr
+  mp3blstr is a modern re-implementation written in pure
+  Golang by mingcheng <mingcheng@outlook.com>:
+      https://github.com/mingcheng/mp3blstr
 
   More than two decades ago, as a student, I listened to
   music with mp3blaster every day. Sadly, the original is
@@ -17,7 +17,7 @@ About
   Many thanks to Bram Avontuur and everyone who contributed
   to mp3blaster.
 
-  Now, mp3blasterr brings it back: the same screen layout,
+  Now, mp3blstr brings it back: the same screen layout,
   shortcut keys, play logic and playlist files as the
   original, plus modern features - mouse support, true
   colour themes, Nerd Font icons, a YAML configuration
@@ -215,7 +215,7 @@ REFRESH SCREEN     Redraw everything.
 SCROLL HELPTEXT    '-' / '+' page through the key help bar
                    at the top of the screen.
 SHOW HELP          Show (or leave) this screen.
-QUIT MP3BLASTERR   Leave the program. Changed settings, the
+QUIT MP3BLSTR   Leave the program. Changed settings, the
                    playlist and the current song and its
                    position are saved for the next start
                    (unless state.save is false). Asks
@@ -223,5 +223,5 @@ QUIT MP3BLASTERR   Leave the program. Changed settings, the
                    ui.confirm_quit is false.
 
 All keys can be changed in the keys section of
-~/.config/mp3blasterr/config.yaml. The current bindings are
+~/.config/mp3blstr/config.yaml. The current bindings are
 listed below.

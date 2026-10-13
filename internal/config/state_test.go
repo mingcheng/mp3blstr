@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mingcheng/mp3blasterr/internal/filemanager"
-	"github.com/mingcheng/mp3blasterr/internal/playback"
-	"github.com/mingcheng/mp3blasterr/internal/playlist"
+	"github.com/mingcheng/mp3blstr/internal/filemanager"
+	"github.com/mingcheng/mp3blstr/internal/playback"
+	"github.com/mingcheng/mp3blstr/internal/playlist"
 )
 
 func TestSaveSettingsUpdatesInPlace(t *testing.T) {

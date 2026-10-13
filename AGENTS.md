@@ -8,7 +8,7 @@
 
 ## Ownership
 
-- [cmd/mp3blasterr](cmd/mp3blasterr) wires startup, configuration, audio backend, and session persistence.
+- [cmd/mp3blstr](cmd/mp3blstr) wires startup, configuration, audio backend, and session persistence.
 - [internal/app](internal/app) owns behavior and state independently of the terminal toolkit; [internal/ui](internal/ui) renders that state and routes terminal input. Keep behavior in app and presentation in ui.
 - [internal/playback](internal/playback) chooses tracks and maintains play history; [internal/audio](internal/audio) handles decoding and device output. Use the playback `Backend`/`Track` interfaces across that boundary.
 - [internal/config](internal/config) owns settings and persistence; [internal/playlist](internal/playlist) owns playlist structure; [internal/filemanager](internal/filemanager) owns directory browsing; [internal/keys](internal/keys) owns key commands and modes.

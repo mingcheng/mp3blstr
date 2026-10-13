@@ -155,7 +155,7 @@ func Default() *Table {
 	)
 	add(GroupGeneral, false,
 		entry{r('?'), CmdHelp, A, "Show Help"},
-		entry{r('q'), CmdQuitProgram, A, "Quit mp3blasterr"},
+		entry{r('q'), CmdQuitProgram, A, "Quit mp3blstr"},
 		entry{s(tcell.KeyCtrlL), CmdRefresh, A, "Refresh Screen"},
 	)
 	// Shown as "( - )" and "( + )" next to the help bar.

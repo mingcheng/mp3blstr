@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/mingcheng/mp3blasterr/internal/audio"
-	"github.com/mingcheng/mp3blasterr/internal/config"
-	"github.com/mingcheng/mp3blasterr/internal/playback"
+	"github.com/mingcheng/mp3blstr/internal/audio"
+	"github.com/mingcheng/mp3blstr/internal/config"
+	"github.com/mingcheng/mp3blstr/internal/playback"
 )
 
 // backend adapts the audio output to playback.Backend.

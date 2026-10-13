@@ -1,11 +1,11 @@
-// Package playlist implements mp3blasterr's hierarchical playlist: a tree of
+// Package playlist implements mp3blstr's hierarchical playlist: a tree of
 // groups, each containing songs and sub groups, with the bookkeeping needed
 // to play groups in order or shuffled.
 package playlist
 
 import (
 	"fmt"
-	"github.com/mingcheng/mp3blasterr/internal/media"
+	"github.com/mingcheng/mp3blstr/internal/media"
 )
 
 // Kind distinguishes the entries of a group.

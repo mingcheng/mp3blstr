@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mingcheng/mp3blasterr/internal/media"
+	"github.com/mingcheng/mp3blstr/internal/media"
 )
 
 // Kind classifies directory entries (and selects their colour).

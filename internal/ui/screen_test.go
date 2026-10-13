@@ -8,14 +8,14 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 
-	"github.com/mingcheng/mp3blasterr/internal/app"
-	"github.com/mingcheng/mp3blasterr/internal/audio"
-	"github.com/mingcheng/mp3blasterr/internal/config"
-	"github.com/mingcheng/mp3blasterr/internal/keys"
-	"github.com/mingcheng/mp3blasterr/internal/listview"
-	"github.com/mingcheng/mp3blasterr/internal/media"
-	"github.com/mingcheng/mp3blasterr/internal/playback"
-	"github.com/mingcheng/mp3blasterr/internal/ui/theme"
+	"github.com/mingcheng/mp3blstr/internal/app"
+	"github.com/mingcheng/mp3blstr/internal/audio"
+	"github.com/mingcheng/mp3blstr/internal/config"
+	"github.com/mingcheng/mp3blstr/internal/keys"
+	"github.com/mingcheng/mp3blstr/internal/listview"
+	"github.com/mingcheng/mp3blstr/internal/media"
+	"github.com/mingcheng/mp3blstr/internal/playback"
+	"github.com/mingcheng/mp3blstr/internal/ui/theme"
 )
 
 type nullView struct{}

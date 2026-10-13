@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mingcheng/mp3blasterr/internal/media"
-	"github.com/mingcheng/mp3blasterr/internal/playlist"
+	"github.com/mingcheng/mp3blstr/internal/media"
+	"github.com/mingcheng/mp3blstr/internal/playlist"
 )
 
 type fakeTrack struct {

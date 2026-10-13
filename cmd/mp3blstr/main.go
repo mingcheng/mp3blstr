@@ -1,4 +1,4 @@
-// Command mp3blasterr (mp3blaster reborn) is a Go re-implementation of the
+// Command mp3blstr (mp3blaster reborn) is a Go re-implementation of the
 // classic ncurses audio player mp3blaster by Bram Avontuur.
 //
 // This package only wires the layers together; the behaviour lives in the
@@ -15,14 +15,14 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/mingcheng/mp3blasterr/internal/app"
-	"github.com/mingcheng/mp3blasterr/internal/audio"
-	"github.com/mingcheng/mp3blasterr/internal/config"
-	"github.com/mingcheng/mp3blasterr/internal/keys"
-	"github.com/mingcheng/mp3blasterr/internal/media"
-	"github.com/mingcheng/mp3blasterr/internal/mediakeys"
-	"github.com/mingcheng/mp3blasterr/internal/ui"
-	"github.com/mingcheng/mp3blasterr/internal/ui/theme"
+	"github.com/mingcheng/mp3blstr/internal/app"
+	"github.com/mingcheng/mp3blstr/internal/audio"
+	"github.com/mingcheng/mp3blstr/internal/config"
+	"github.com/mingcheng/mp3blstr/internal/keys"
+	"github.com/mingcheng/mp3blstr/internal/media"
+	"github.com/mingcheng/mp3blstr/internal/mediakeys"
+	"github.com/mingcheng/mp3blstr/internal/ui"
+	"github.com/mingcheng/mp3blstr/internal/ui/theme"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
@@ -34,7 +34,10 @@ const (
 	exitFailure = 1
 )
 
-func main() { os.Exit(run(os.Args[1:])) }
+func main() {
+	// macOS delivers media keys through the main thread's run loop.
+	mediakeys.Main(func() int { return run(os.Args[1:]) })
+}
 
 // run starts the program with the command line arguments args and returns
 // the exit code.
@@ -50,7 +53,7 @@ func run(args []string) int {
 		printVersion()
 		return exitOK
 	}
-	if os.Getenv("MP3BLASTERR_NERDFONT") == "1" {
+	if os.Getenv("MP3BLSTR_NERDFONT") == "1" {
 		cli.NerdFont = true
 	}
 
@@ -196,7 +199,7 @@ func fail(err error) int {
 }
 
 func printVersion() {
-	fmt.Printf("%s version %s - https://github.com/mingcheng/mp3blasterr\n", filepath.Base(os.Args[0]), version)
+	fmt.Printf("%s version %s - https://github.com/mingcheng/mp3blstr\n", filepath.Base(os.Args[0]), version)
 	fmt.Println("Supported audio formats: MP3 WAV OGG/Vorbis FLAC HTTP-streams")
 	fmt.Println("Supported audio output drivers: native (CoreAudio/WASAPI/PulseAudio/ALSA via oto, no cgo)")
 	fmt.Println("Build features: mouse, themes, nerd-font, read-ahead buffering")
@@ -304,7 +307,7 @@ func saveState(a *app.App, opts *config.Options, initial []config.Setting) {
 	}
 }
 
-// newLogger logs to $HOME/.config/mp3blasterr/debug.log when debugging is
+// newLogger logs to $HOME/.config/mp3blstr/debug.log when debugging is
 // enabled, and discards everything otherwise.
 func newLogger(debug bool) *slog.Logger {
 	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -320,6 +323,6 @@ func newLogger(debug bool) *slog.Logger {
 		return discard
 	}
 	l := slog.New(slog.NewTextHandler(f, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	l.Debug("Debugging of mp3blasterr started.")
+	l.Debug("Debugging of mp3blstr started.")
 	return l
 }

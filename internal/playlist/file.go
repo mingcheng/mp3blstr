@@ -11,8 +11,8 @@ import (
 
 	"github.com/jamesnetherton/m3u"
 
-	"github.com/mingcheng/mp3blasterr/internal/atomicfile"
-	"github.com/mingcheng/mp3blasterr/internal/media"
+	"github.com/mingcheng/mp3blstr/internal/atomicfile"
+	"github.com/mingcheng/mp3blstr/internal/media"
 )
 
 // GlobalSettings carries the <GLOBAL ...> settings of a playlist file.
