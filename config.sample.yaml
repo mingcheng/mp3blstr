@@ -37,6 +37,8 @@ ui:
 playback:
   # play_mode: allgroups     # onegroup, allgroups or allrandom
   # repeat: false
+  # fade_out: true           # fade out at the end of known-length tracks (toggle: V)
+  # fade_seconds: 5          # fade duration in seconds (config file only, 0 disables)
   # skip_length: 10          # seconds skipped by rewind/forward
   # threads: 100             # read-ahead buffer in frames (0..500, step 50)
   # down_frequency: false
@@ -61,7 +63,7 @@ selection:                   # select/deselect items by pattern (+ and -)
 
 # Session state. On exit mp3blasterr writes the settings changed during the
 # session back into this file (theme, nerd_font, wrap_around, threads,
-# sort_mode, play_mode, repeat, volume, balance and the settings below):
+# sort_mode, play_mode, repeat, fade_out, volume, balance and the settings below):
 # existing values are updated in place, new ones are added to their
 # section; comments and blank lines are kept. Command line options are not
 # saved. The playlist is kept in ~/.config/mp3blasterr/session.lst and
@@ -89,6 +91,7 @@ keys:
   # set_group_title: "5"
   # toggle_repeat: "6"
   # toggle_shuffle: "7"
+  # toggle_fade_out: v
   # toggle_playmode: "8"
   # toggle_sort: F
   # change_thread: "#"

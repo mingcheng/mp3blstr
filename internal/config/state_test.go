@@ -202,13 +202,14 @@ func TestStateSettingsRoundTrip(t *testing.T) {
 	o := Default()
 	o.Theme, o.NerdFont, o.Wrap, o.Threads = "modern", true, false, 300
 	o.SortMode, o.PlayMode, o.Repeat = filemanager.SortSizeBig, playback.PlaySongs, true
+	o.FadeOut = false
 	o.Volume, o.Balance = 42, 60
 	o.LastDir, o.LastSong, o.LastPosition = "/music", "/music/a, b #1: 'x'.mp3", 95
 
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	before := Default().StateSettings()
 	changed := ChangedSettings(before, o.StateSettings())
-	if len(changed) != 12 {
+	if len(changed) != 13 {
 		t.Fatalf("changed %v", changed)
 	}
 	if err := SaveSettings(path, changed); err != nil {
@@ -234,10 +235,26 @@ func TestStateSettingsRoundTrip(t *testing.T) {
 func TestStateKeywordErrors(t *testing.T) {
 	for _, in := range []string{
 		"playback: {volume: 101}", "playback: {balance: -1}", "playback: {play_mode: sometimes}",
+		"playback: {fade_seconds: -1}", "playback: {fade_out: maybe}",
 		"state: {last_position: -5}", "state: {save: maybe}",
 	} {
 		if err := Default().Parse(strings.NewReader(in)); err == nil {
 			t.Errorf("%q: expected error", in)
+		}
+	}
+}
+
+func TestFadeDurationConfigOnly(t *testing.T) {
+	opts := Default()
+	if err := opts.Parse(strings.NewReader("playback: {fade_seconds: 2}")); err != nil {
+		t.Fatal(err)
+	}
+	if opts.FadeSeconds != 2 {
+		t.Fatalf("fade seconds = %d", opts.FadeSeconds)
+	}
+	for _, setting := range opts.StateSettings() {
+		if setting.Name == "playback.fade_seconds" {
+			t.Fatal("fade duration should not be saved as runtime state")
 		}
 	}
 }

@@ -97,11 +97,12 @@ const helpBarRows = 4
 
 // App is the application state.
 type App struct {
-	Opts    *config.Options
-	Keys    *keys.Table
-	Matcher *media.Matcher
-	Mixer   *audio.Mixer // nil when the mixer is disabled
-	Player  *playback.Controller
+	Opts      *config.Options
+	Keys      *keys.Table
+	Matcher   *media.Matcher
+	Mixer     *audio.Mixer // nil when the mixer is disabled
+	fadeMixer *audio.Mixer // audio gain control also present with --no-mixer
+	Player    *playback.Controller
 
 	Root *playlist.Group
 	Cur  *playlist.Group
@@ -151,6 +152,7 @@ type Deps struct {
 	Keys       *keys.Table
 	Matcher    *media.Matcher
 	Mixer      *audio.Mixer     // nil disables the mixer
+	FadeMixer  *audio.Mixer     // output mixer when different from the visible mixer
 	Backend    playback.Backend // opens songs for the player
 	View       View
 	StartDir   string       // initial directory of the file manager
@@ -170,6 +172,7 @@ func New(d Deps) *App {
 		Keys:       d.Keys,
 		Matcher:    d.Matcher,
 		Mixer:      d.Mixer,
+		fadeMixer:  d.FadeMixer,
 		Root:       root,
 		Cur:        root,
 		Mode:       keys.ModeNormal,
@@ -185,6 +188,12 @@ func New(d Deps) *App {
 	a.Player = playback.New(root, d.Backend, d.View.Post, (*listener)(a))
 	a.Player.Mode = d.Options.PlayMode
 	a.Player.Repeat = d.Options.Repeat
+	if a.fadeMixer == nil {
+		a.fadeMixer = a.Mixer
+	}
+	if a.fadeMixer != nil {
+		a.fadeMixer.SetFade(d.Options.FadeOut)
+	}
 	a.Player.SkipSeconds = d.Options.SkipSeconds
 	a.SetMessage("Press '?' to get help on available commands")
 	return a

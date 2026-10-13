@@ -70,3 +70,31 @@ func TestPCMReaderClose(t *testing.T) {
 		t.Fatalf("Read after close = %d, %v (source read: %v)", n, err, src.pos != 0)
 	}
 }
+
+func TestFadeOutSeekAndToggle(t *testing.T) {
+	src := &sliceSource{n: 8}
+	mixer := NewMixer()
+	mixer.SetFade(true)
+	var position int64
+	r := &pcmReader{src: src, s: mixer.fadeOut(src, 8, 4, &position), fadePosition: &position, sourceRate: int64(OutputRate)}
+	buf := make([]byte, 8*frameBytes)
+	if n, err := r.Read(buf); n != len(buf) || err != nil {
+		t.Fatalf("Read = %d, %v", n, err)
+	}
+	for index, gain := range []float32{1, 1, 1, 1, 1, .75, .5, .25} {
+		want := float32(index) / 8 * gain
+		if got := sample(buf, index, 0); got != want {
+			t.Errorf("frame %d = %v, want %v", index, got, want)
+		}
+	}
+	if _, err := r.Seek(6, io.SeekStart); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Read(buf[:frameBytes]); err != nil || sample(buf, 0, 0) != .375 {
+		t.Fatalf("fade after seek = %v, %v", sample(buf, 0, 0), err)
+	}
+	mixer.SetFade(false)
+	if _, err := r.Read(buf[:frameBytes]); err != nil || sample(buf, 0, 0) != .875 {
+		t.Fatalf("fade disabled = %v, %v", sample(buf, 0, 0), err)
+	}
+}

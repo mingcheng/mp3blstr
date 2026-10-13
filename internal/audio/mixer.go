@@ -3,6 +3,7 @@ package audio
 import (
 	"math"
 	"sync"
+	"sync/atomic"
 
 	"github.com/gopxl/beep/v2"
 )
@@ -21,6 +22,7 @@ type Mixer struct {
 	mu      sync.RWMutex
 	devices []MixerDevice
 	current int
+	fade    atomic.Bool
 }
 
 // Mixer device indices.
@@ -90,6 +92,35 @@ func (m *Mixer) SetDevice(dev, v int) {
 		m.devices[dev].Value = clampPercent(v)
 	}
 	m.mu.Unlock()
+}
+
+// SetFade enables or disables end-of-track fading without changing master volume.
+func (m *Mixer) SetFade(enabled bool) { m.fade.Store(enabled) }
+
+// Fade reports whether end-of-track fading is enabled.
+func (m *Mixer) Fade() bool { return m.fade.Load() }
+
+// fadeOut attenuates the final duration frames of a stream of known length.
+func (m *Mixer) fadeOut(s beep.Streamer, total, duration int64, position *int64) beep.Streamer {
+	if total <= 0 || duration <= 0 {
+		return s
+	}
+	start := max(int64(0), total-duration)
+	return beep.StreamerFunc(func(samples [][2]float64) (int, bool) {
+		n, ok := s.Stream(samples)
+		if m.Fade() {
+			for i := range samples[:n] {
+				frame := *position + int64(i)
+				if frame >= start {
+					gain := float64(max(int64(0), total-frame)) / float64(total-start)
+					samples[i][0] *= gain
+					samples[i][1] *= gain
+				}
+			}
+		}
+		*position += int64(n)
+		return n, ok
+	})
 }
 
 // gains returns the left and right gain factors.

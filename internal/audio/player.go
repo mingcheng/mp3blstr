@@ -29,6 +29,7 @@ type Options struct {
 	PrefetchFrames int  // read-ahead in MPEG frames (the "threads" setting); 0 disables
 	Downsample     bool // halve the sample rate (--downsample)
 	EightBit       bool // reduce to 8 bit resolution (--8bits)
+	FadeSeconds    int  // fade duration at the end of a known-length track
 }
 
 // Output owns the audio device. It is safe for concurrent use.
@@ -103,6 +104,10 @@ func (o *Output) Open(path string, opts Options) (*Player, error) {
 	}
 
 	var s beep.Streamer = src
+	totalFrames := int64(0)
+	if n := src.Len(); n > 0 && d.format.SampleRate > 0 {
+		totalFrames = int64(n) * int64(OutputRate) / int64(d.format.SampleRate)
+	}
 	rate := d.format.SampleRate
 	if opts.Downsample && rate >= 16000 {
 		s = beep.Resample(3, rate, rate/2, s)
@@ -114,9 +119,11 @@ func (o *Output) Open(path string, opts Options) (*Player, error) {
 	if opts.EightBit {
 		s = eightBit(s)
 	}
+	var fadePosition int64
+	s = o.mixer.fadeOut(s, totalFrames, int64(opts.FadeSeconds)*int64(OutputRate), &fadePosition)
 
 	p := &Player{
-		pcm:      &pcmReader{src: src, s: o.mixer.Streamer(s)},
+		pcm:      &pcmReader{src: src, s: o.mixer.Streamer(s), fadePosition: &fadePosition, sourceRate: int64(d.format.SampleRate)},
 		rate:     int(d.format.SampleRate),
 		info:     d.info,
 		seekable: d.seekable,
@@ -231,11 +238,13 @@ func isClosed(ch <-chan struct{}) bool {
 // encodes them as interleaved little endian float32. Seek offsets are sample
 // positions of the decoded source.
 type pcmReader struct {
-	mu  sync.Mutex
-	src source
-	s   beep.Streamer
-	buf [][2]float64
-	eof bool
+	mu           sync.Mutex
+	src          source
+	s            beep.Streamer
+	fadePosition *int64
+	sourceRate   int64
+	buf          [][2]float64
+	eof          bool
 }
 
 func (r *pcmReader) Read(b []byte) (int, error) {
@@ -263,8 +272,14 @@ func (r *pcmReader) Read(b []byte) (int, error) {
 func (r *pcmReader) Seek(offset int64, _ int) (int64, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if err := r.src.Seek(int(offset)); err != nil {
+		return offset, err
+	}
 	r.eof = false
-	return offset, r.src.Seek(int(offset))
+	if r.fadePosition != nil && r.sourceRate > 0 {
+		*r.fadePosition = offset * int64(OutputRate) / r.sourceRate
+	}
+	return offset, nil
 }
 
 func (r *pcmReader) position() int {

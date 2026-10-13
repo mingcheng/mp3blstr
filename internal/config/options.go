@@ -35,6 +35,8 @@ type Options struct {
 	HideOthers  bool
 	PlayMode    playback.PlayMode
 	Repeat      bool
+	FadeOut     bool
+	FadeSeconds int // seconds of end-of-track fade, set in config only
 	SkipSeconds int // seconds skipped by forward/rewind
 	PanSize     int // columns panned by left/right
 	Debug       bool
@@ -83,6 +85,8 @@ func Default() *Options {
 		FPL:                   5,
 		SortMode:              filemanager.SortAlpha,
 		PlayMode:              playback.PlayGroups,
+		FadeOut:               true,
+		FadeSeconds:           5,
 		SkipSeconds:           10,
 		PanSize:               5,
 		DisplayMode:           playlist.DisplayFileName,

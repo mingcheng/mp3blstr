@@ -99,6 +99,7 @@ func run(args []string) int {
 		Keys:       km,
 		Matcher:    matcher,
 		Mixer:      mixer,
+		FadeMixer:  gains,
 		Backend:    &backend{out: audio.NewOutput(gains), opts: opts},
 		View:       u,
 		StartDir:   startDir(opts, cli.Chroot != ""),

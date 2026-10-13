@@ -45,7 +45,7 @@ func TestSampleConfig(t *testing.T) {
 		o.SelectCaseInsensitive != def.SelectCaseInsensitive || o.SaveState != def.SaveState {
 		t.Errorf("sample values differ from the defaults: %+v", o)
 	}
-	if len(o.Colours) != 18 || len(o.Keys) != 22 {
+	if len(o.Colours) != 18 || len(o.Keys) != 23 {
 		t.Errorf("colours %d, keys %d", len(o.Colours), len(o.Keys))
 	}
 }

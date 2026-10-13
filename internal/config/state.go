@@ -43,6 +43,7 @@ func (o *Options) StateSettings() []Setting {
 		{"files.sort_mode", o.SortMode.String()},
 		{"playback.play_mode", o.PlayMode.String()},
 		{"playback.repeat", strconv.FormatBool(o.Repeat)},
+		{"playback.fade_out", strconv.FormatBool(o.FadeOut)},
 		{"playback.volume", strconv.Itoa(o.Volume)},
 		{"playback.balance", strconv.Itoa(o.Balance)},
 		{"state.last_dir", o.LastDir},

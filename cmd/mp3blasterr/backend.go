@@ -20,6 +20,7 @@ func (b *backend) Opener(path string) func() (playback.Track, error) {
 		PrefetchFrames: b.opts.Threads,
 		Downsample:     b.opts.Downsample,
 		EightBit:       b.opts.EightBits,
+		FadeSeconds:    b.opts.FadeSeconds,
 	}
 	return func() (playback.Track, error) {
 		p, err := b.out.Open(path, o)

@@ -126,8 +126,10 @@ func keywords(o *Options) map[string]keyword {
 		"ui.wrap_around": boolKw(&o.Wrap),
 		"ui.pan_size":    numberKw(&o.PanSize, func(n int) bool { return n >= 1 && n <= 40 }),
 
-		"playback.play_mode": parsedKw(&o.PlayMode, playback.ParsePlayMode),
-		"playback.repeat":    boolKw(&o.Repeat),
+		"playback.play_mode":    parsedKw(&o.PlayMode, playback.ParsePlayMode),
+		"playback.repeat":       boolKw(&o.Repeat),
+		"playback.fade_out":     boolKw(&o.FadeOut),
+		"playback.fade_seconds": numberKw(&o.FadeSeconds, nonNegative),
 		"playback.threads": {typ: typeNumber, apply: func(v []string) error {
 			n, _ := strconv.Atoi(v[0])
 			if !o.SetThreads(n) {

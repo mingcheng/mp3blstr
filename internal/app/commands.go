@@ -164,6 +164,11 @@ func (a *App) Exec(cmd keys.Command) {
 		if p.Repeat {
 			p.QuitAfterPlaylist = false
 		}
+	case keys.CmdToggleFadeOut:
+		a.Opts.FadeOut = !a.Opts.FadeOut
+		if a.fadeMixer != nil {
+			a.fadeMixer.SetFade(a.Opts.FadeOut)
+		}
 	case keys.CmdToggleShuffle:
 		a.Cur.Shuffle = !a.Cur.Shuffle
 		p.ResetNextSong()

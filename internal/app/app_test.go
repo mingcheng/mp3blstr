@@ -11,6 +11,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 
+	"github.com/mingcheng/mp3blasterr/internal/audio"
 	"github.com/mingcheng/mp3blasterr/internal/config"
 	"github.com/mingcheng/mp3blasterr/internal/keys"
 	"github.com/mingcheng/mp3blasterr/internal/media"
@@ -267,6 +268,17 @@ func TestThemeAndNerdFontToggles(t *testing.T) {
 
 func TestRepeatShuffleAndHelpBarCategories(t *testing.T) {
 	a, _ := newTestApp(t)
+	a.Mixer = audio.NewMixer()
+	a.fadeMixer = a.Mixer
+	a.Mixer.SetFade(a.Opts.FadeOut)
+	press(a, 'V')
+	if a.Opts.FadeOut || a.Mixer.Fade() {
+		t.Fatal("V should disable fade out")
+	}
+	press(a, 'V')
+	if !a.Opts.FadeOut || !a.Mixer.Fade() {
+		t.Fatal("V should enable fade out")
+	}
 	press(a, tcell.KeyF1) // file mode: R/Z work everywhere
 	press(a, 'R', 'Z')
 	if !a.Repeat() || !a.Shuffle() {
@@ -291,6 +303,19 @@ func TestRepeatShuffleAndHelpBarCategories(t *testing.T) {
 		if !strings.Contains(ref, want) {
 			t.Errorf("key reference lacks %q", want)
 		}
+	}
+}
+
+func TestFadeOutWithoutVisibleMixer(t *testing.T) {
+	opts := config.Default()
+	gains := audio.NewMixer()
+	a := New(Deps{Options: opts, Keys: keys.Default(), FadeMixer: gains, Backend: noBackend{}, View: &fakeView{}})
+	if a.Mixer != nil || !gains.Fade() {
+		t.Fatal("fade should start enabled without a visible mixer")
+	}
+	press(a, 'V')
+	if opts.FadeOut || gains.Fade() {
+		t.Fatal("fade should toggle without a visible mixer")
 	}
 }
 

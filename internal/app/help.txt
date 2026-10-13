@@ -11,8 +11,8 @@ About
       https://github.com/mingcheng/mp3blasterr
 
   More than twenty years ago, as a student, the author
-  listened to music with mp3blaster every day, but the 
-  mp3blaster stopped being updated long ago and slowly 
+  listened to music with mp3blaster every day, but the
+  mp3blaster stopped being updated long ago and slowly
   faded into history.
 
   mp3blasterr brings it back: the same screen layout, keys,
@@ -173,6 +173,8 @@ REWIND/FORWARD     Skip SkipLength seconds (default 10).
 SKIP TO END SONG   Jump to the last seconds of the song.
 PREVIOUS/NEXT GROUP
                    Skip the rest of the group being played.
+TOGGLE FADE OUT    Fade out the end of known-length songs (V).
+                   Set playback.fade_seconds in the config file (default 5).
 START SEARCH       Type the beginning of a name to jump to
                    it. The search ends after 2 seconds of
                    inactivity or with ENTER / ESC.

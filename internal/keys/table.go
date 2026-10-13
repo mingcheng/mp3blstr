@@ -104,6 +104,7 @@ func Default() *Table {
 	add(GroupPlayback, false,
 		entry{r('R'), CmdToggleRepeat, A, "Toggle Repeat"},
 		entry{r('Z'), CmdToggleShuffle, A, "Toggle GroupShuffle"},
+		entry{r('V'), CmdToggleFadeOut, A, "Toggle Fade Out"},
 		entry{f(8), CmdTogglePlaymode, N, "Toggle Play Mode"},
 		entry{r('['), CmdPlayPrevGroup, A, "Previous Group"},
 		entry{r(']'), CmdPlayNextGroup, A, "Next Group"},

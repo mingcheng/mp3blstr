@@ -17,6 +17,7 @@ const (
 	CmdWritePlaylist
 	CmdSetGroupTitle
 	CmdToggleRepeat
+	CmdToggleFadeOut
 	CmdToggleShuffle
 	CmdEnter
 	CmdTogglePlaymode
@@ -94,6 +95,7 @@ var configNames = map[string]Command{
 	"key.writeplaylist":        CmdWritePlaylist,
 	"key.setgrouptitle":        CmdSetGroupTitle,
 	"key.togglerepeat":         CmdToggleRepeat,
+	"key.togglefadeout":        CmdToggleFadeOut,
 	"key.toggleshuffle":        CmdToggleShuffle,
 	"key.toggleplaymode":       CmdTogglePlaymode,
 	"key.startplaylist":        CmdNone, // obsolete in the original as well
