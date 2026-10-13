@@ -1,29 +1,28 @@
-mp3blasterr - mp3blaster reborned!
+mp3blasterr: mp3blaster [r]eborned!
 
 About
 =====
 
-  mp3blasterr is a Go re-implementation of the classic
-  console audio player mp3blaster by Bram Avontuur,
-      https://github.com/stragulus/mp3blaster.
+  mp3blaster is a classic console audio player written by
+  Bram Avontuur:
+      https://github.com/stragulus/mp3blaster
 
-  Author: mingcheng<mingcheng@outlook.com>
+  mp3blasterr is a Go re-implementation of mp3blaster by
+  mingcheng <mingcheng@outlook.com>:
       https://github.com/mingcheng/mp3blasterr
 
-  More than twenty years ago, as a student, the author
-  listened to music with mp3blaster every day, but the
-  mp3blaster stopped being updated long ago and slowly
-  faded into history.
+  More than two decades ago, as a student, I listened to
+  music with mp3blaster every day. Sadly, the original is
+  no longer maintained and has slowly faded into history.
+  Many thanks to Bram Avontuur and everyone who contributed
+  to mp3blaster.
 
-  mp3blasterr brings it back: the same screen layout, keys,
-  play logic and playlist files as the original, plus
-  modern features - mouse support, true colour themes, Nerd
-  Font icons, a YAML configuration file, session saving and
-  cancellable background scans - in pure Go, on macOS,
-  Windows, Linux and FreeBSD.
-
-  Thanks to Bram Avontuur and everybody who contributed to
-  mp3blaster.
+  Now, mp3blasterr brings it back: the same screen layout,
+  shortcut keys, play logic and playlist files as the
+  original, plus modern features - mouse support, true
+  colour themes, Nerd Font icons, a YAML configuration
+  file, session saving and cancellable background scans.
+  It runs on macOS, Windows, Linux and FreeBSD.
 
 Mouse support
 =============
@@ -180,7 +179,8 @@ SKIP TO END SONG   Jump to the last seconds of the song.
 PREVIOUS/NEXT GROUP
                    Skip the rest of the group being played.
 TOGGLE FADE OUT    Fade out the end of known-length songs (V).
-                   Set playback.fade_seconds in the config file (default 5).
+                   The length is set by playback.fade_seconds
+                   in the config file (default 5).
 START SEARCH       Type the beginning of a name to jump to
                    it. The search ends after 2 seconds of
                    inactivity or with ENTER / ESC.
