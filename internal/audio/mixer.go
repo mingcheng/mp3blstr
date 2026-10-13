@@ -1,6 +1,7 @@
 package audio
 
 import (
+	"math"
 	"sync"
 
 	"github.com/gopxl/beep/v2"
@@ -13,7 +14,9 @@ type MixerDevice struct {
 }
 
 // Mixer is a software replacement for the OSS mixer of the original: it has
-// a list of devices of which one is shown (and controlled) at a time.
+// a list of devices of which one is shown (and controlled) at a time. It is
+// safe for concurrent use; the audio goroutine reads the gains while the UI
+// changes them.
 type Mixer struct {
 	mu      sync.RWMutex
 	devices []MixerDevice
@@ -69,14 +72,14 @@ func (m *Mixer) Prev() {
 func (m *Mixer) Change(delta int) {
 	m.mu.Lock()
 	d := &m.devices[m.current]
-	d.Value = clamp(d.Value+delta, 0, 100)
+	d.Value = clampPercent(d.Value + delta)
 	m.mu.Unlock()
 }
 
 // Set sets the current device to an absolute value.
 func (m *Mixer) Set(v int) {
 	m.mu.Lock()
-	m.devices[m.current].Value = clamp(v, 0, 100)
+	m.devices[m.current].Value = clampPercent(v)
 	m.mu.Unlock()
 }
 
@@ -84,7 +87,7 @@ func (m *Mixer) Set(v int) {
 func (m *Mixer) SetDevice(dev, v int) {
 	m.mu.Lock()
 	if dev >= 0 && dev < len(m.devices) {
-		m.devices[dev].Value = clamp(v, 0, 100)
+		m.devices[dev].Value = clampPercent(v)
 	}
 	m.mu.Unlock()
 }
@@ -118,29 +121,15 @@ func (m *Mixer) Streamer(s beep.Streamer) beep.Streamer {
 	})
 }
 
-func clamp(v, lo, hi int) int {
-	if v < lo {
-		return lo
-	}
-	if v > hi {
-		return hi
-	}
-	return v
-}
+func clampPercent(v int) int { return max(0, min(v, 100)) }
 
 // eightBit reduces the resolution to 8 bits (the --8bits option).
 func eightBit(s beep.Streamer) beep.Streamer {
 	return beep.StreamerFunc(func(samples [][2]float64) (int, bool) {
 		n, ok := s.Stream(samples)
 		for i := range samples[:n] {
-			for c := 0; c < 2; c++ {
-				x := samples[i][c] * 127
-				if x >= 0 {
-					x = float64(int(x + 0.5))
-				} else {
-					x = float64(int(x - 0.5))
-				}
-				samples[i][c] = x / 127
+			for c := range samples[i] {
+				samples[i][c] = math.Round(samples[i][c]*127) / 127
 			}
 		}
 		return n, ok

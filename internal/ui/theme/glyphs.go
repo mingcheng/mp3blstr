@@ -1,6 +1,6 @@
 package theme
 
-import "github.com/mingcheng/mp3blaster/internal/playback"
+import "github.com/mingcheng/mp3blasterr/internal/playback"
 
 // Glyphs are the symbols used by the interface.
 type Glyphs struct {
@@ -20,14 +20,9 @@ type Glyphs struct {
 }
 
 var plainStatus = map[playback.Status]string{
-	playback.StatusPlay:    "|>",
-	playback.StatusPause:   "||",
-	playback.StatusRewind:  "<<",
-	playback.StatusForward: ">>",
-	playback.StatusPrev:    "|<",
-	playback.StatusNext:    ">|",
-	playback.StatusStop:    "[]",
-	playback.StatusRecord:  "()",
+	playback.StatusPlay:  "|>",
+	playback.StatusPause: "||",
+	playback.StatusStop:  "[]",
 }
 
 // Plain returns the symbols of the original program.
@@ -52,14 +47,9 @@ func Nerd(rounded bool) Glyphs {
 		Stop:    " \U000F04DB ",
 		Forward: " \U000F0211 ",
 		Status: map[playback.Status]string{
-			playback.StatusPlay:    "\U000F040A ",
-			playback.StatusPause:   "\U000F03E4 ",
-			playback.StatusRewind:  "\U000F045F ",
-			playback.StatusForward: "\U000F0211 ",
-			playback.StatusPrev:    "\U000F04AE ",
-			playback.StatusNext:    "\U000F04AD ",
-			playback.StatusStop:    "\U000F04DB ",
-			playback.StatusRecord:  "\U000F044A ",
+			playback.StatusPlay:  "\U000F040A ",
+			playback.StatusPause: "\U000F03E4 ",
+			playback.StatusStop:  "\U000F04DB ",
 		},
 		Song:        "\U000F075A ",
 		Playing:     "\U000F040A ",
@@ -82,6 +72,7 @@ func For(th Theme, nerd bool) Glyphs {
 	return Plain(th.Rounded)
 }
 
+// box sets the box drawing characters, with rounded corners if rounded.
 func (g *Glyphs) box(rounded bool) {
 	g.H, g.V = "─", "│"
 	g.TL, g.TR, g.BL, g.BR = "┌", "┐", "└", "┘"

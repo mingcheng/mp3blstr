@@ -1,14 +1,19 @@
-// Package config holds mp3blaster's global options and reads them from the
-// $HOME/.config/mp3blaster/mp3blasterrc configuration file and from the
+// Package config holds mp3blasterr's global options and reads them from the
+// $HOME/.config/mp3blasterr/config.yaml configuration file and from the
 // command line.
 package config
 
 import (
-	"github.com/mingcheng/mp3blaster/internal/filemanager"
-	"github.com/mingcheng/mp3blaster/internal/keys"
-	"github.com/mingcheng/mp3blaster/internal/listview"
-	"github.com/mingcheng/mp3blaster/internal/media"
-	"github.com/mingcheng/mp3blaster/internal/playback"
+	"fmt"
+	"slices"
+	"strings"
+
+	"github.com/mingcheng/mp3blasterr/internal/filemanager"
+	"github.com/mingcheng/mp3blasterr/internal/keys"
+	"github.com/mingcheng/mp3blasterr/internal/listview"
+	"github.com/mingcheng/mp3blasterr/internal/media"
+	"github.com/mingcheng/mp3blasterr/internal/playback"
+	"github.com/mingcheng/mp3blasterr/internal/playlist"
 )
 
 // KeyBinding is a key rebinding read from the configuration file.
@@ -25,17 +30,15 @@ type Options struct {
 	EightBits   bool
 	SoundDevice string
 	MixerDevice string
-	AudioDriver string
 
 	SortMode    filemanager.SortMode
 	HideOthers  bool
 	PlayMode    playback.PlayMode
 	Repeat      bool
-	WarnDelay   int
-	SkipSeconds int
-	PanSize     int
+	SkipSeconds int // seconds skipped by forward/rewind
+	PanSize     int // columns panned by left/right
 	Debug       bool
-	DisplayMode int // playlist display mode: 0 path, 1 file name, 2 ID3
+	DisplayMode playlist.DisplayMode
 	Threads     int // read-ahead buffer (0..500 in steps of 50)
 
 	AudioPatterns    []string
@@ -50,13 +53,13 @@ type Options struct {
 	ScanMP3               bool
 	Wrap                  bool
 
-	// Colours maps "Color.X.fg"-style keywords (lower case, without the
-	// "color." prefix) to colour names.
+	// Colours maps the ui.colors settings, as lower case "popupinput.fg"
+	// style names without underscores, to colour names.
 	Colours map[string]string
 	Keys    []KeyBinding
 
 	// Modern extensions.
-	Theme     string // classic or modern
+	Theme     string // one of Themes
 	NerdFont  bool
 	Mouse     bool
 	ListWidth listview.Width // width of the main window
@@ -80,22 +83,40 @@ func Default() *Options {
 		FPL:                   5,
 		SortMode:              filemanager.SortAlpha,
 		PlayMode:              playback.PlayGroups,
-		WarnDelay:             2,
 		SkipSeconds:           10,
 		PanSize:               5,
-		DisplayMode:           1,
+		DisplayMode:           playlist.DisplayFileName,
 		Threads:               100,
 		PlaylistDir:           media.HomeDir(),
 		SelectCaseInsensitive: true,
 		Wrap:                  true,
 		Colours:               map[string]string{},
-		Theme:                 "classic",
+		Theme:                 Themes[0],
 		Mouse:                 true,
 		ListWidth:             listview.DefaultWidth,
 		SaveState:             true,
 		Volume:                100,
 		Balance:               50,
 	}
+}
+
+// Themes lists the built-in colour themes in switching order.
+var Themes = []string{"classic", "modern"}
+
+// ParseTheme validates a theme name (case-insensitive) and returns it in
+// its canonical form.
+func ParseTheme(name string) (string, error) {
+	t := strings.ToLower(strings.TrimSpace(name))
+	if !slices.Contains(Themes, t) {
+		return "", fmt.Errorf("unknown theme %q (%s)", name, strings.Join(Themes, ", "))
+	}
+	return t, nil
+}
+
+// NextTheme returns the theme following name in Themes (wrapping around).
+func NextTheme(name string) string {
+	i := slices.Index(Themes, strings.ToLower(name))
+	return Themes[(i+1)%len(Themes)]
 }
 
 // SetThreads validates and sets the read-ahead buffer size.

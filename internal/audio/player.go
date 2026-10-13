@@ -15,7 +15,7 @@ import (
 	"github.com/ebitengine/oto/v3"
 	"github.com/gopxl/beep/v2"
 
-	"github.com/mingcheng/mp3blaster/internal/media"
+	"github.com/mingcheng/mp3blasterr/internal/media"
 )
 
 // OutputRate is the sample rate of the audio device.
@@ -31,7 +31,7 @@ type Options struct {
 	EightBit       bool // reduce to 8 bit resolution (--8bits)
 }
 
-// Output owns the audio device.
+// Output owns the audio device. It is safe for concurrent use.
 type Output struct {
 	mixer   *Mixer
 	once    sync.Once
@@ -42,6 +42,7 @@ type Output struct {
 // NewOutput creates the output. The device is opened lazily on first use.
 func NewOutput(m *Mixer) *Output { return &Output{mixer: m} }
 
+// init opens the device once; later calls return the first result.
 func (o *Output) init() error {
 	o.once.Do(func() {
 		ctx, ready, err := oto.NewContext(&oto.NewContextOptions{
@@ -49,7 +50,7 @@ func (o *Output) init() error {
 			ChannelCount:    2,
 			Format:          oto.FormatFloat32LE,
 			BufferSize:      100 * time.Millisecond,
-			ApplicationName: "mp3blaster",
+			ApplicationName: "mp3blasterr",
 		})
 		if err != nil {
 			o.initErr = err
@@ -65,25 +66,26 @@ func (o *Output) init() error {
 	return o.initErr
 }
 
-// Player plays one song.
+// Player plays one song. It implements playback.Track.
 type Player struct {
 	out      *oto.Player
 	pcm      *pcmReader
-	rate     int
+	rate     int // sample rate of the decoded source
 	info     media.SongInfo
 	seekable bool
+	cancel   func() // aborts pending network I/O (nil for files)
 
-	doneOnce sync.Once
-	done     chan struct{}
+	done     chan struct{} // closed by watch at the end of the song
+	stop     chan struct{} // closed by Stop
 	stopOnce sync.Once
-	stop     chan struct{}
+	err      error // set by Stop, see Err
 }
 
 // Open decodes path and prepares it for playback (paused). It may block on
 // network access for URLs, so call it outside the UI goroutine.
 func (o *Output) Open(path string, opts Options) (*Player, error) {
 	if err := o.init(); err != nil {
-		return nil, fmt.Errorf("%w (%v)", ErrDeviceOpen, err)
+		return nil, fmt.Errorf("%w (%v)", media.ErrDeviceOpen, err)
 	}
 	d, err := decode(path)
 	if err != nil {
@@ -92,6 +94,8 @@ func (o *Output) Open(path string, opts Options) (*Player, error) {
 	var src source
 	if opts.PrefetchFrames > 0 {
 		pf := newPrefetcher(d.stream, d.seekable, opts.PrefetchFrames*frameSamples)
+		// Give the buffer a head start so playback doesn't begin with an
+		// underrun.
 		pf.waitFilled(min(pf.capacity, 8*frameSamples), 3*time.Second)
 		src = pf
 	} else {
@@ -116,6 +120,7 @@ func (o *Output) Open(path string, opts Options) (*Player, error) {
 		rate:     int(d.format.SampleRate),
 		info:     d.info,
 		seekable: d.seekable,
+		cancel:   d.cancel,
 		done:     make(chan struct{}),
 		stop:     make(chan struct{}),
 	}
@@ -134,7 +139,7 @@ func (p *Player) watch() {
 			return
 		case <-t.C:
 			if p.pcm.atEOF() && p.out.BufferedSize() == 0 {
-				p.doneOnce.Do(func() { close(p.done) })
+				close(p.done)
 				return
 			}
 		}
@@ -160,9 +165,6 @@ func (p *Player) Elapsed() int {
 		float64(p.out.BufferedSize())/float64(frameBytes*int(OutputRate))
 	return max(int(secs), 0)
 }
-
-// Total returns the length of the song in seconds (0 when unknown).
-func (p *Player) Total() int { return p.info.TotalSeconds }
 
 // Seek moves the play position by delta seconds.
 func (p *Player) Seek(delta int) error {
@@ -191,21 +193,38 @@ func (p *Player) seekTo(pos int) error {
 	return err
 }
 
-// Err returns the decoding error that ended playback, if any.
-func (p *Player) Err() error {
-	if err := p.pcm.src.Err(); err != nil {
-		return fmt.Errorf("%w (%v)", ErrFileRead, err)
-	}
-	return nil
-}
+// Err returns the decoding error that ended playback, if any. It is only
+// meaningful after Stop.
+func (p *Player) Err() error { return p.err }
 
-// Stop ends playback and releases the decoder.
+// Stop ends playback and releases the decoder. Pending network reads are
+// aborted first, so stopping a stalled stream doesn't block.
 func (p *Player) Stop() {
 	p.stopOnce.Do(func() {
 		close(p.stop)
+		finished := isClosed(p.done)
+		if p.cancel != nil {
+			p.cancel()
+		}
 		p.out.PauseAndStopReading()
-		p.pcm.src.Close()
+		p.pcm.close()
+		// Aborting a stream that is still playing makes its decoder fail;
+		// that error is ours, not the stream's.
+		if finished || p.cancel == nil {
+			if err := p.pcm.src.Err(); err != nil {
+				p.err = fmt.Errorf("%w (%v)", media.ErrFileRead, err)
+			}
+		}
 	})
+}
+
+func isClosed(ch <-chan struct{}) bool {
+	select {
+	case <-ch:
+		return true
+	default:
+		return false
+	}
 }
 
 // pcmReader feeds oto: it pulls samples through the streamer chain and
@@ -252,6 +271,15 @@ func (r *pcmReader) position() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.src.Position()
+}
+
+// close releases the source. It waits for a Read in progress, so the
+// decoder is never closed while it is being used.
+func (r *pcmReader) close() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.eof = true
+	r.src.Close()
 }
 
 func (r *pcmReader) atEOF() bool {

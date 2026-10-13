@@ -1,6 +1,6 @@
 package app
 
-import "github.com/mingcheng/mp3blaster/internal/keys"
+import "github.com/mingcheng/mp3blasterr/internal/keys"
 
 // The functions in this file are used by the mouse handlers of the UI.
 

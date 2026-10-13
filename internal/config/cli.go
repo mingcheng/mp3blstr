@@ -5,9 +5,13 @@ import (
 	"io"
 
 	"github.com/spf13/pflag"
+
+	"github.com/mingcheng/mp3blasterr/internal/listview"
+	"github.com/mingcheng/mp3blasterr/internal/playback"
 )
 
-// CLI holds the command line options.
+// CLI holds the command line options. Settings that also exist in the
+// configuration file are applied on top of it with Options.ApplyCLI.
 type CLI struct {
 	Downsample  bool
 	EightBits   bool
@@ -33,9 +37,9 @@ type CLI struct {
 	NoMouse   bool
 	ListWidth string
 
-	Files []string
+	Files []string // songs to play
 
-	set map[string]bool
+	set map[string]bool // long names of the options given
 }
 
 // IsSet reports whether the long option name was given.
@@ -44,7 +48,7 @@ func (c *CLI) IsSet(name string) bool { return c.set[name] }
 // ParseArgs parses the command line (without the program name).
 func ParseArgs(args []string) (*CLI, error) {
 	c := &CLI{set: map[string]bool{}}
-	fs := pflag.NewFlagSet("mp3blaster", pflag.ContinueOnError)
+	fs := pflag.NewFlagSet("mp3blasterr", pflag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	fs.SortFlags = false
 	fs.BoolVarP(&c.Downsample, "downsample", "2", false, "")
@@ -80,33 +84,80 @@ func ParseArgs(args []string) (*CLI, error) {
 	return c, nil
 }
 
+// ApplyCLI applies the command line options on top of the settings read
+// from the configuration file. Boolean flags can only switch options on.
+func (o *Options) ApplyCLI(c *CLI) error {
+	o.NoMixer = o.NoMixer || c.NoMixer
+	o.Downsample = o.Downsample || c.Downsample
+	o.EightBits = o.EightBits || c.EightBits
+	o.Repeat = o.Repeat || c.Repeat
+	o.Debug = o.Debug || c.Debug
+	o.NerdFont = o.NerdFont || c.NerdFont
+	if c.NoMouse {
+		o.Mouse = false
+	}
+	if c.SoundDevice != "" {
+		o.SoundDevice = c.SoundDevice
+	}
+	if c.MixerDevice != "" {
+		o.MixerDevice = c.MixerDevice
+	}
+	if c.PlayMode != "" {
+		m, err := playback.ParsePlayMode(c.PlayMode)
+		if err != nil {
+			return err
+		}
+		o.PlayMode = m
+	}
+	if c.IsSet("runframes") && !o.SetFPL(c.RunFrames) {
+		return fmt.Errorf("invalid --runframes %d (1..10)", c.RunFrames)
+	}
+	if c.IsSet("threads") && !o.SetThreads(c.Threads) {
+		return fmt.Errorf("invalid --threads %d (0..500 in steps of 50)", c.Threads)
+	}
+	if c.Theme != "" {
+		t, err := ParseTheme(c.Theme)
+		if err != nil {
+			return err
+		}
+		o.Theme = t
+	}
+	if c.IsSet("list-width") {
+		w, err := listview.ParseWidth(c.ListWidth)
+		if err != nil {
+			return err
+		}
+		o.ListWidth = w
+	}
+	return nil
+}
+
 // Usage prints the help text of the original program (plus the options
 // that are specific to this implementation).
 func Usage(w io.Writer, version string) {
-	fmt.Fprintf(w, "Mp3blaster v%s (C)1997 - 2009 Bram Avontuur, Go port.\n", version)
+	fmt.Fprintf(w, "mp3blasterr v%s - mp3blaster reborn, a Go port of Mp3blaster (C)1997 - 2009 Bram Avontuur.\n", version)
 	fmt.Fprint(w, `Usage:
-	mp3blaster [options]
-	mp3blaster [options] [file1 ...]
+	mp3blasterr [options]
+	mp3blasterr [options] [file1 ...]
 		Play one or more mp3's
-	mp3blaster [options] --list/-l <playlist.lst>
+	mp3blasterr [options] --list/-l <playlist.lst>
 		Load a playlist but don't start playing.
-	mp3blaster [options] --autolist/-a <playlist.lst>
+	mp3blasterr [options] --autolist/-a <playlist.lst>
 		Load a playlist and start playing.
 
 Options:
 	--downsample/-2: Downsample (44->22Khz etc)
 	--8bits/-8: 8bit audio
 	--config-file/-c=file: Use other config file than the default
-		$HOME/.config/mp3blaster/mp3blasterrc (falls back to
-		~/.mp3blasterrc)
-	--debug/-d: Log debug-info in $HOME/.config/mp3blaster/debug.log.
+		$HOME/.config/mp3blasterr/config.yaml
+	--debug/-d: Log debug-info in $HOME/.config/mp3blasterr/debug.log.
 	--status-file/-f=file: Keep info on the mp3s being played, in the
 		specified file.
 	--help/-h: This help screen.
 	--mixer-device/-m: Mixer device to use (accepted for compatibility)
 	--no-mixer/-n: Don't start the built-in mixer.
-	--chroot/-o=<rootdir>: Set <rootdir> as mp3blaster's root dir.
-		This affects *ALL* file operations in mp3blaster!!(including
+	--chroot/-o=<rootdir>: Set <rootdir> as mp3blasterr's root dir.
+		This affects *ALL* file operations in mp3blasterr!!(including
 		playlist reading&writing!) Note that only users with uid 0
 		can use this option (Unix only).
 	--playmode/-p={onegroup,allgroups,allrandom}

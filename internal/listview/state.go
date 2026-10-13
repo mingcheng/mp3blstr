@@ -14,19 +14,12 @@ type State struct {
 
 // SetRows updates the viewport height and keeps the cursor visible.
 func (s *State) SetRows(rows, n int) {
-	if rows < 1 {
-		rows = 1
-	}
-	s.Rows = rows
+	s.Rows = max(rows, 1)
 	s.Clamp(n)
 }
 
-func (s *State) rows() int {
-	if s.Rows < 1 {
-		return 1
-	}
-	return s.Rows
-}
+// rows is the viewport height, at least 1.
+func (s *State) rows() int { return max(s.Rows, 1) }
 
 // Clamp keeps cursor and offset within bounds for a list of n items.
 func (s *State) Clamp(n int) {
@@ -41,15 +34,11 @@ func (s *State) Clamp(n int) {
 		s.Cursor = 0
 	}
 	s.ensureVisible()
-	if max := n - s.rows(); s.Offset > max {
-		s.Offset = max
-	}
-	if s.Offset < 0 {
-		s.Offset = 0
-	}
+	s.Offset = max(0, min(s.Offset, n-s.rows()))
 	s.ensureVisible()
 }
 
+// ensureVisible scrolls so that the cursor is within the viewport.
 func (s *State) ensureVisible() {
 	if s.Cursor < s.Offset {
 		s.Offset = s.Cursor
@@ -91,12 +80,9 @@ func (s *State) Set(i, n int) {
 	s.ensureVisible()
 }
 
-func (s *State) pageStep() int {
-	if st := s.rows() - 1; st > 0 {
-		return st
-	}
-	return 1
-}
+// pageStep is the number of lines a page scrolls: one line of the old page
+// stays visible.
+func (s *State) pageStep() int { return max(s.rows()-1, 1) }
 
 // PageDown scrolls one page down, keeping the relative cursor position.
 func (s *State) PageDown(n int) {
@@ -109,14 +95,8 @@ func (s *State) PageDown(n int) {
 		return
 	}
 	rel := s.Cursor - s.Offset
-	s.Offset += s.pageStep()
-	if max := n - s.rows(); s.Offset > max {
-		s.Offset = max
-	}
-	s.Cursor = s.Offset + rel
-	if s.Cursor >= n {
-		s.Cursor = n - 1
-	}
+	s.Offset = min(s.Offset+s.pageStep(), n-s.rows())
+	s.Cursor = min(s.Offset+rel, n-1)
 	s.ensureVisible()
 }
 
@@ -130,10 +110,7 @@ func (s *State) PageUp(n int) {
 		return
 	}
 	rel := s.Cursor - s.Offset
-	s.Offset -= s.pageStep()
-	if s.Offset < 0 {
-		s.Offset = 0
-	}
+	s.Offset = max(s.Offset-s.pageStep(), 0)
 	s.Cursor = s.Offset + rel
 	s.Clamp(n)
 }
@@ -147,25 +124,11 @@ func (s *State) Bottom(n int) { s.Set(n-1, n) }
 // PanBy pans the content horizontally; maxWidth is the length of the
 // longest visible line and width the drawable width.
 func (s *State) PanBy(delta, maxWidth, width int) {
-	limit := maxWidth - width
-	if limit < 0 {
-		limit = 0
-	}
-	s.Pan += delta
-	if s.Pan > limit {
-		s.Pan = limit
-	}
-	if s.Pan < 0 {
-		s.Pan = 0
-	}
+	limit := max(maxWidth-width, 0)
+	s.Pan = max(0, min(s.Pan+delta, limit))
 }
 
 // Visible returns the half open range of visible indices.
 func (s *State) Visible(n int) (from, to int) {
-	from = s.Offset
-	to = from + s.rows()
-	if to > n {
-		to = n
-	}
-	return from, to
+	return s.Offset, min(s.Offset+s.rows(), n)
 }

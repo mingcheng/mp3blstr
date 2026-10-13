@@ -1,7 +1,9 @@
-// Package keys defines the commands understood by mp3blaster, the program
+// Package keys defines the commands understood by mp3blasterr, the program
 // modes in which they are valid and the (re)configurable key bindings that
 // trigger them.
 package keys
+
+import "strings"
 
 // Command identifies a user action.
 type Command int
@@ -51,9 +53,7 @@ const (
 	CmdFileSelect
 	CmdHelpPrev
 	CmdHelpNext
-	CmdFileMarkBad
 	CmdClearPlaylist
-	CmdDelMark
 	CmdFileToggleSort
 	CmdFileDelete
 	CmdPlaySkipEnd
@@ -83,8 +83,10 @@ const (
 	ModeAny           Mode = 0xff
 )
 
-// configNames maps configuration file keywords (case-insensitive) to the
-// command they rebind. Deprecated aliases from the original are kept.
+// configNames maps key binding names (case-insensitive) to the command they
+// rebind. The configuration file uses them in snake_case below its keys
+// section: keys.play.next is "key.play.next", keys.file.add_files is
+// "key.file.addfiles". Deprecated aliases from the original are kept.
 var configNames = map[string]Command{
 	"key.selectfiles":          CmdSelectFiles,
 	"key.addgroup":             CmdAddGroup,
@@ -135,9 +137,7 @@ var configNames = map[string]Command{
 	"key.play.forward":         CmdPlayForward,
 	"key.helpprev":             CmdHelpPrev,
 	"key.helpnext":             CmdHelpNext,
-	"key.file.markbad":         CmdFileMarkBad,
 	"key.clearplaylist":        CmdClearPlaylist,
-	"key.deletemark":           CmdDelMark,
 	"key.file.delete":          CmdFileDelete,
 	"key.play.skipend":         CmdPlaySkipEnd,
 	"key.play.nextgroup":       CmdPlayNextGroup,
@@ -156,18 +156,9 @@ var configNames = map[string]Command{
 	"key.togglenerdfont":       CmdToggleNerdFont,
 }
 
-// CommandForConfigName resolves a "Key.*" configuration keyword.
+// CommandForConfigName resolves a "key.*" binding name (see configNames).
+// Obsolete names resolve to CmdNone.
 func CommandForConfigName(name string) (Command, bool) {
-	c, ok := configNames[lower(name)]
+	c, ok := configNames[strings.ToLower(name)]
 	return c, ok
-}
-
-func lower(s string) string {
-	b := []byte(s)
-	for i, c := range b {
-		if c >= 'A' && c <= 'Z' {
-			b[i] = c + 'a' - 'A'
-		}
-	}
-	return string(b)
 }

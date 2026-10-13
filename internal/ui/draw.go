@@ -42,12 +42,6 @@ func (c canvas) put(x, y int, text string, style tcell.Style, maxWidth int) int 
 	return used
 }
 
-// putPadded draws text and pads it with spaces to exactly width cells.
-func (c canvas) putPadded(x, y int, text string, style tcell.Style, width int) {
-	n := c.put(x, y, text, style, width)
-	c.fill(x+n, y, width-n, 1, style)
-}
-
 // fill paints a rectangle with spaces.
 func (c canvas) fill(x, y, w, h int, style tcell.Style) {
 	for j := y; j < y+h; j++ {
@@ -59,12 +53,14 @@ func (c canvas) fill(x, y, w, h int, style tcell.Style) {
 	}
 }
 
+// hline repeats a one cell glyph n times to the right of (x, y).
 func (c canvas) hline(x, y, n int, glyph string, style tcell.Style) {
 	for i := 0; i < n; i++ {
 		c.put(x+i, y, glyph, style, 1)
 	}
 }
 
+// vline repeats a one cell glyph n times below (x, y).
 func (c canvas) vline(x, y, n int, glyph string, style tcell.Style) {
 	for j := 0; j < n; j++ {
 		c.put(x, y+j, glyph, style, 1)
@@ -110,8 +106,10 @@ func crunch(s string, width int) string {
 	return string(r[:head]) + ".." + string(r[len(r)-tail:])
 }
 
+// rect is a screen area in cells.
 type rect struct{ x, y, w, h int }
 
+// contains reports whether cell (x, y) lies in r.
 func (r rect) contains(x, y int) bool {
 	return x >= r.x && x < r.x+r.w && y >= r.y && y < r.y+r.h
 }

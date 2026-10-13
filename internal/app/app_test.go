@@ -11,10 +11,10 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 
-	"github.com/mingcheng/mp3blaster/internal/config"
-	"github.com/mingcheng/mp3blaster/internal/keys"
-	"github.com/mingcheng/mp3blaster/internal/media"
-	"github.com/mingcheng/mp3blaster/internal/playback"
+	"github.com/mingcheng/mp3blasterr/internal/config"
+	"github.com/mingcheng/mp3blasterr/internal/keys"
+	"github.com/mingcheng/mp3blasterr/internal/media"
+	"github.com/mingcheng/mp3blasterr/internal/playback"
 )
 
 type fakeView struct {
@@ -74,7 +74,7 @@ func newTestApp(t *testing.T) (*App, string) {
 	opts := config.Default()
 	opts.PlaylistDir = dir
 	m, _ := media.NewMatcher(nil, nil)
-	a := New(opts, keys.Default(), m, nil, noBackend{}, &fakeView{}, dir, "", nil)
+	a := New(Deps{Options: opts, Keys: keys.Default(), Matcher: m, Backend: noBackend{}, View: &fakeView{}, StartDir: dir})
 	return a, dir
 }
 
@@ -278,10 +278,10 @@ func TestRepeatShuffleAndHelpBarCategories(t *testing.T) {
 	}
 
 	lines := a.HelpBarLines()
-	if lines[0][0].Desc != "Select Files" || lines[3][0].Desc != "Delete And Mark" || len(lines[3]) != 1 {
+	if lines[0][0].Desc != "Select Files" || lines[2][2].Desc != "Delete" || len(lines[2]) != 3 {
 		t.Fatal("each category should start on a new line")
 	}
-	if lines[4][0].Cmd != keys.CmdToggleRepeat || lines[4][1].Cmd != keys.CmdToggleShuffle {
+	if lines[3][0].Cmd != keys.CmdToggleRepeat || lines[3][1].Cmd != keys.CmdToggleShuffle {
 		t.Fatal("playback category should follow the playlist")
 	}
 

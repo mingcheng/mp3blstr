@@ -13,9 +13,8 @@ import (
 	"math/rand/v2"
 	"strings"
 
-	"github.com/mingcheng/mp3blaster/internal/audio"
-	"github.com/mingcheng/mp3blaster/internal/media"
-	"github.com/mingcheng/mp3blaster/internal/playlist"
+	"github.com/mingcheng/mp3blasterr/internal/media"
+	"github.com/mingcheng/mp3blasterr/internal/playlist"
 )
 
 // PlayMode is the global playback mode.
@@ -26,8 +25,7 @@ const (
 	PlayNone   PlayMode = iota
 	PlayGroup           // play the current group, not its sub groups
 	PlayGroups          // play the current group including sub groups
-	PlayGroupsRandomly
-	PlaySongs // shuffle all songs from all groups
+	PlaySongs           // shuffle all songs from all groups
 )
 
 // Next cycles through the user selectable modes.
@@ -49,15 +47,14 @@ func (m PlayMode) Description() string {
 		return "Global Playback: Play current group, but not its subgroups"
 	case PlayGroups:
 		return "Global Playback: Play current group, including subgroups"
-	case PlayGroupsRandomly:
-		return "Global Playback: You Should Not See This"
 	case PlaySongs:
 		return "Global Playback: Shuffle all songs from all groups"
 	}
 	return ""
 }
 
-// String returns the name used on the command line and in playlists.
+// String returns the name used on the command line, in the configuration
+// file and in playlists ("" for PlayNone).
 func (m PlayMode) String() string {
 	switch m {
 	case PlayGroup:
@@ -67,7 +64,7 @@ func (m PlayMode) String() string {
 	case PlaySongs:
 		return "allrandom"
 	}
-	return "unknown"
+	return ""
 }
 
 // ParsePlayMode parses onegroup, allgroups or allrandom.
@@ -91,29 +88,26 @@ const (
 	StatusNone Status = iota
 	StatusPlay
 	StatusPause
-	StatusRewind
-	StatusForward
-	StatusPrev
-	StatusNext
 	StatusStop
-	StatusRecord
 )
 
-// Track is a song opened by the Backend.
+// Track is a song opened by the Backend. Its methods are called on the UI
+// goroutine.
 type Track interface {
-	Start()
-	Pause()
-	Stop()
-	Done() <-chan struct{}
-	Info() media.SongInfo
-	Elapsed() int
-	Total() int
-	Seek(delta int) error
-	SeekFromEnd(secs int) error
-	Err() error
+	Start()                     // start or resume playback
+	Pause()                     // pause playback
+	Stop()                      // end playback and release resources
+	Done() <-chan struct{}      // closed when the song has been played
+	Info() media.SongInfo       // song metadata and stream parameters
+	Elapsed() int               // play position in seconds
+	Seek(delta int) error       // move the position by delta seconds
+	SeekFromEnd(secs int) error // jump to secs seconds before the end
+	Err() error                 // the error that ended playback (after Stop)
 }
 
-// Backend opens songs.
+// Backend opens songs. Errors should wrap a media.SoundError; wrapping
+// media.ErrDeviceOpen stops the playlist instead of skipping to the next
+// song.
 type Backend interface {
 	// Opener is called on the UI goroutine and returns a function that
 	// opens path. That function may block and runs on its own goroutine.
@@ -132,6 +126,15 @@ type Listener interface {
 	CurrentGroup() *playlist.Group   // the group shown in the main window
 }
 
+// single tells how the current song relates to the playlist.
+type single int
+
+const (
+	singleNone     single = iota // a song chosen from the playlist
+	singleThenList               // a single song; the playlist continues afterwards
+	singleOnly                   // a single song; playback stops afterwards
+)
+
 // Controller implements the playlist logic.
 type Controller struct {
 	backend  Backend
@@ -149,16 +152,16 @@ type Controller struct {
 	playing     bool // the user wants the playlist to play
 	track       Track
 	paused      bool
-	opening     bool
-	gen         int
-	trackQuit   chan struct{}
-	oneMp3      string
-	playingOne  int // 0: no single song, 1: single song interrupting a list, 2: single song only
-	allowRepeat bool
+	opening     bool          // a song is being opened in the background
+	gen         int           // invalidates callbacks of earlier songs
+	trackQuit   chan struct{} // stops the goroutine waiting for Done
+	oneMp3      string        // song requested by PlayOne, not started yet
+	single      single
+	allowRepeat bool // the last song ended normally; Repeat may restart the list
 	history     History
-	nextSong    int
-	playingGrp  *playlist.Group
-	groupWin    *playlist.Group
+	nextSong    int             // precomputed index of the next unplayed song, -1 if none
+	playingGrp  *playlist.Group // group whose songs are being played
+	groupWin    *playlist.Group // group whose sub groups are played (PlayGroups)
 
 	// A song to continue with on the next Play (restored session).
 	resumeSong string
@@ -289,7 +292,7 @@ func (c *Controller) startResume() {
 	if c.positionAt(song) {
 		c.history.Add(song)
 	} else {
-		c.playingOne = 1 // not in the playlist: play it, then the playlist
+		c.single = singleThenList // not in the playlist: play it, then the playlist
 	}
 	c.seekOnOpen = pos
 	c.open(song)
@@ -333,15 +336,14 @@ func (c *Controller) PlayOne(path string) {
 	c.clearResume()
 	c.oneMp3 = path
 	c.playing = true
+	// The playlist continues afterwards when it was playing.
 	wasPlaying := false
 	if c.track != nil || c.opening {
 		c.stopSong()
-		if c.playingOne == 0 || c.playingOne == 1 {
-			wasPlaying = true
-		}
+		wasPlaying = c.single != singleOnly
 	}
-	c.playingOne = 0
-	if c.startSong(wasPlaying) != startAsync {
+	c.single = singleNone
+	if !c.startSong(wasPlaying) {
 		c.advance()
 	}
 	c.changed()
@@ -362,6 +364,8 @@ func (c *Controller) Previous() {
 	if !c.playing || c.history.AtStart() {
 		return
 	}
+	// The position is just past the current song: step back over it and
+	// over the song before it, which advance then replays.
 	c.history.Previous()
 	c.history.Previous()
 	c.stopSong()
@@ -410,7 +414,7 @@ func (c *Controller) Stop() {
 	c.stopSong()
 	c.playing = false
 	c.resetPlaylist(true)
-	c.playingOne = 0
+	c.single = singleNone
 	c.resetNext()
 	c.changed()
 }
@@ -474,17 +478,11 @@ func (c *Controller) resetNext() {
 	c.nextName = ""
 }
 
-type startResult int
-
-const (
-	startAsync  startResult = iota // the song is being opened
-	startNoSong                    // nothing left to play
-)
-
-// advance starts the next song when the playlist is active but idle.
+// advance starts the next song when the playlist is active but idle. At
+// the end of the playlist it quits, repeats or stops.
 func (c *Controller) advance() {
 	for c.playing && c.track == nil && !c.opening {
-		if c.startSong(false) == startAsync {
+		if c.startSong(false) {
 			return
 		}
 		allow := c.allowRepeat
@@ -501,13 +499,16 @@ func (c *Controller) advance() {
 	}
 }
 
-func (c *Controller) startSong(wasPlaying bool) startResult {
+// startSong starts opening the next song: the one requested by PlayOne,
+// the next one in the history (after Previous) or a new one from the
+// playlist. It reports false when there is nothing to play.
+func (c *Controller) startSong(wasPlaying bool) bool {
 	song := c.oneMp3
-	if song == "" && c.playingOne == 2 {
-		c.playingOne = 0
-		return startNoSong
-	}
-	if song == "" {
+	switch {
+	case song == "" && c.single == singleOnly:
+		c.single = singleNone
+		return false
+	case song == "":
 		if !c.history.AtEnd() {
 			song = c.history.Element()
 			c.history.Next()
@@ -515,20 +516,21 @@ func (c *Controller) startSong(wasPlaying bool) startResult {
 			song = s
 			c.history.Add(s)
 		}
-		c.playingOne = 0
+		c.single = singleNone
 		if song == "" {
-			return startNoSong
+			return false
 		}
-	} else if wasPlaying {
-		c.playingOne = 1
-	} else {
-		c.playingOne = 2
+	case wasPlaying:
+		c.single = singleThenList
+	default:
+		c.single = singleOnly
 	}
 	c.oneMp3 = ""
 	c.open(song)
-	return startAsync
+	return true
 }
 
+// open opens song in the background; opened continues on the UI goroutine.
 func (c *Controller) open(song string) {
 	c.opening = true
 	c.gen++
@@ -540,6 +542,8 @@ func (c *Controller) open(song string) {
 	}()
 }
 
+// opened starts playing a freshly opened song, unless it was superseded
+// while it was being opened.
 func (c *Controller) opened(gen int, song string, tr Track, err error) {
 	if gen != c.gen {
 		if tr != nil {
@@ -552,13 +556,12 @@ func (c *Controller) opened(gen int, song string, tr Track, err error) {
 		c.seekOnOpen = 0
 		c.status = StatusStop
 		c.listener.Warning(errorText(err))
-		var se audio.SoundError
-		if errors.As(err, &se) && se == audio.ErrDeviceOpen {
+		if errors.Is(err, media.ErrDeviceOpen) {
+			// Every other song would fail as well.
 			c.stopList()
-			c.changed()
-			return
+		} else {
+			c.advance()
 		}
-		c.advance()
 		c.changed()
 		return
 	}
@@ -588,6 +591,7 @@ func (c *Controller) opened(gen int, song string, tr Track, err error) {
 	c.changed()
 }
 
+// finished is called when song gen has been played completely.
 func (c *Controller) finished(gen int) {
 	if gen != c.gen || c.track == nil {
 		return
@@ -599,13 +603,15 @@ func (c *Controller) finished(gen int) {
 
 // errorText returns the classic message for err.
 func errorText(err error) string {
-	var se audio.SoundError
+	var se media.SoundError
 	if errors.As(err, &se) {
-		return string(se)
+		return se.Error()
 	}
 	return "Couldn't open file."
 }
 
+// stopSong stops the current song (or cancels opening one) without
+// changing the playlist state.
 func (c *Controller) stopSong() {
 	c.gen++
 	c.opening = false
@@ -632,14 +638,18 @@ func (c *Controller) stopSong() {
 	}
 }
 
+// stopList ends playing the playlist.
 func (c *Controller) stopList() {
 	c.playing = false
-	c.playingOne = 0
+	c.single = singleNone
 	c.allowRepeat = false
 	c.resetPlaylist(true)
 	c.resetNext()
 }
 
+// resetPlaylist marks songs and groups as unplayed and clears the history:
+// the whole playlist when full is set, otherwise only the group being
+// played.
 func (c *Controller) resetPlaylist(full bool) {
 	if !full {
 		if c.playingGrp != nil {
@@ -683,82 +693,13 @@ func (c *Controller) determineSong() string {
 	var song *playlist.Item
 	switch c.Mode {
 	case PlaySongs:
-		idx := c.nextSong
-		if idx < 0 {
-			idx = c.randN(total)
-		}
-		song = c.root.UnplayedSong(idx, true, true)
-		if total-1 > 0 {
-			c.nextSong = c.randN(total - 1)
-		} else {
-			c.nextSong = -1
-		}
+		song = c.root.UnplayedSong(c.takeIndex(total, true), true, true)
 	case PlayGroup, PlayGroups:
-		if c.Mode == PlayGroups && c.groupWin == nil {
-			c.groupWin = c.listener.CurrentGroup()
-			c.playingGrp = nil
-		}
-		for c.playingGrp == nil || c.playingGrp.UnplayedSongs(false) == 0 {
-			if c.playingGrp != nil {
-				c.playingGrp.SetPlaying(false)
-				c.playingGrp = nil
-				if c.Mode == PlayGroup {
-					break
-				}
-			}
-			if c.Mode == PlayGroups {
-				if c.groupWin == nil {
-					c.resetPlaylist(false)
-					break
-				}
-				tg := c.groupWin.UnplayedGroups(true)
-				if tg == 0 {
-					c.resetPlaylist(false)
-					break
-				}
-				idx := 0
-				if c.groupWin.Shuffle {
-					idx = c.randN(tg)
-				}
-				c.playingGrp = c.groupWin.UnplayedGroup(idx, true, true)
-				if c.playingGrp != nil && c.playingGrp.UnplayedSongs(false) > 0 {
-					c.playingGrp.SetPlayed(true)
-					c.playingGrp.SetPlaying(true)
-				} else {
-					c.playingGrp = nil
-					c.groupWin = nil
-				}
-			} else {
-				c.playingGrp = c.listener.CurrentGroup()
-				c.playingGrp.SetPlaying(true)
-			}
-		}
-		if c.playingGrp == nil {
+		if !c.selectGroup() {
 			return ""
 		}
-		if n := c.playingGrp.UnplayedSongs(false); n > 0 {
-			if !c.playingGrp.Shuffle {
-				idx := c.nextSong
-				if idx < 0 {
-					idx = 0
-				}
-				song = c.playingGrp.UnplayedSong(idx, true, false)
-				c.nextSong = 0
-			} else {
-				idx := c.nextSong
-				if idx < 0 {
-					idx = c.randN(n)
-				}
-				song = c.playingGrp.UnplayedSong(idx, true, false)
-				if n-1 > 0 {
-					c.nextSong = c.randN(n - 1)
-				} else {
-					c.nextSong = -1
-				}
-			}
-		} else {
-			c.resetPlaylist(true)
-		}
+		g := c.playingGrp
+		song = g.UnplayedSong(c.takeIndex(g.UnplayedSongs(false), g.Shuffle), true, false)
 	}
 	if song == nil {
 		return ""
@@ -769,6 +710,75 @@ func (c *Controller) determineSong() string {
 	return song.Path
 }
 
+// takeIndex returns the index of the song to play among n unplayed songs:
+// the precomputed nextSong if any, else a random one (or the first when
+// random is false). It then precomputes nextSong for the following call,
+// so the next song can be shown in advance.
+func (c *Controller) takeIndex(n int, random bool) int {
+	idx := c.nextSong
+	if !random {
+		c.nextSong = 0
+		return max(idx, 0)
+	}
+	if idx < 0 {
+		idx = c.randN(n)
+	}
+	c.nextSong = -1
+	if n > 1 {
+		c.nextSong = c.randN(n - 1)
+	}
+	return idx
+}
+
+// selectGroup makes sure playingGrp is a group with unplayed songs,
+// advancing to the next group when the current one is exhausted. It
+// reports false when the play mode has no group left to play.
+func (c *Controller) selectGroup() bool {
+	if c.Mode == PlayGroups && c.groupWin == nil {
+		c.groupWin = c.listener.CurrentGroup()
+		c.playingGrp = nil
+	}
+	for c.playingGrp == nil || c.playingGrp.UnplayedSongs(false) == 0 {
+		if c.playingGrp != nil {
+			c.playingGrp.SetPlaying(false)
+			c.playingGrp = nil
+			if c.Mode == PlayGroup {
+				return false // only the current group is played
+			}
+		}
+		if c.Mode == PlayGroup {
+			c.playingGrp = c.listener.CurrentGroup()
+			c.playingGrp.SetPlaying(true)
+			continue
+		}
+		// PlayGroups: the next unplayed group below groupWin, in order or
+		// at random when groupWin is shuffled.
+		if c.groupWin == nil {
+			c.resetPlaylist(false)
+			return false
+		}
+		n := c.groupWin.UnplayedGroups(true)
+		if n == 0 {
+			c.resetPlaylist(false)
+			return false
+		}
+		idx := 0
+		if c.groupWin.Shuffle {
+			idx = c.randN(n)
+		}
+		c.playingGrp = c.groupWin.UnplayedGroup(idx, true, true)
+		if c.playingGrp != nil && c.playingGrp.UnplayedSongs(false) > 0 {
+			c.playingGrp.SetPlayed(true)
+			c.playingGrp.SetPlaying(true)
+		} else {
+			c.playingGrp = nil
+			c.groupWin = nil
+		}
+	}
+	return true
+}
+
+// updateNextName sets the name of the song that nextSong points at.
 func (c *Controller) updateNextName() {
 	var ns string
 	switch c.Mode {

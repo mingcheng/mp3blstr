@@ -40,20 +40,23 @@ const frameSamples = 1152
 // prefetcher decodes ahead of playback in its own goroutine, smoothing out
 // slow disks and network streams. It is the counterpart of the buffering
 // threads of the original mp3blaster.
+//
+// Lock order: srcMu before mu. mu is never held while decoding, so Stream
+// (called by the audio output) never waits for the decoder.
 type prefetcher struct {
 	src      beep.StreamSeekCloser
 	seekable bool
-	capacity int
+	capacity int // in samples
 
-	srcMu sync.Mutex // serialises decoder access (fill vs. seek)
+	srcMu sync.Mutex // serialises decoder access (fill vs. seek and close)
 
-	mu     sync.Mutex
-	cond   *sync.Cond
+	mu     sync.Mutex // guards the fields below
+	cond   *sync.Cond // signalled when buf, eof, closed or gen change
 	buf    [][2]float64
 	pos    int // stream position of buf[0]
 	eof    bool
 	closed bool
-	gen    int
+	gen    int // incremented by Seek; chunks decoded before are dropped
 }
 
 func newPrefetcher(src beep.StreamSeekCloser, seekable bool, capacity int) *prefetcher {
@@ -63,6 +66,7 @@ func newPrefetcher(src beep.StreamSeekCloser, seekable bool, capacity int) *pref
 	return p
 }
 
+// fill runs on its own goroutine until Close, keeping the buffer full.
 func (p *prefetcher) fill() {
 	chunk := make([][2]float64, frameSamples)
 	for {
@@ -95,13 +99,13 @@ func (p *prefetcher) fill() {
 	}
 }
 
-// waitFilled blocks until at least min samples are buffered, the stream
+// waitFilled blocks until at least want samples are buffered, the stream
 // ended or the timeout expired.
-func (p *prefetcher) waitFilled(min int, timeout time.Duration) {
+func (p *prefetcher) waitFilled(want int, timeout time.Duration) {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		p.mu.Lock()
-		done := len(p.buf) >= min || p.eof || p.closed
+		done := len(p.buf) >= want || p.eof || p.closed
 		p.mu.Unlock()
 		if done {
 			return
@@ -110,6 +114,7 @@ func (p *prefetcher) waitFilled(min int, timeout time.Duration) {
 	}
 }
 
+// Stream hands out buffered samples; it never blocks on the decoder.
 func (p *prefetcher) Stream(samples [][2]float64) (int, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()

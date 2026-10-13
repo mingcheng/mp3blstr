@@ -3,7 +3,7 @@ package ui
 import (
 	"github.com/rivo/tview"
 
-	"github.com/mingcheng/mp3blaster/internal/keys"
+	"github.com/mingcheng/mp3blasterr/internal/keys"
 )
 
 // drawFrame draws the static lines that divide the screen.

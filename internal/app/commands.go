@@ -1,21 +1,17 @@
 package app
 
 import (
-	"path"
-	"regexp"
-	"strings"
-	"time"
-
 	"github.com/gdamore/tcell/v2"
 
-	"github.com/mingcheng/mp3blaster/internal/keys"
-	"github.com/mingcheng/mp3blaster/internal/listview"
-	"github.com/mingcheng/mp3blaster/internal/playback"
-	"github.com/mingcheng/mp3blaster/internal/playlist"
-	"github.com/mingcheng/mp3blaster/internal/ui/theme"
+	"github.com/mingcheng/mp3blasterr/internal/config"
+	"github.com/mingcheng/mp3blasterr/internal/keys"
+	"github.com/mingcheng/mp3blasterr/internal/listview"
+	"github.com/mingcheng/mp3blasterr/internal/playlist"
 )
 
-// HandleKey processes a key press.
+// HandleKey processes a key press. While a popup, a search or a task is
+// active, it gets all keys; otherwise the key is looked up in the key table
+// for the current mode.
 func (a *App) HandleKey(k keys.Key) {
 	switch a.Input {
 	case InputSearch:
@@ -39,7 +35,8 @@ func (a *App) HandleKey(k keys.Key) {
 	a.Exec(cmd)
 }
 
-// Exec runs a command.
+// Exec runs a command. Commands that make no sense in the current mode are
+// ignored.
 func (a *App) Exec(cmd keys.Command) {
 	p := a.Player
 	switch cmd {
@@ -72,7 +69,7 @@ func (a *App) Exec(cmd keys.Command) {
 	case keys.CmdHelp:
 		if a.Mode == keys.ModeHelp {
 			a.setMode(keys.ModeNormal)
-			a.SetMessage("Visit http://mp3blaster.sourceforge.net/")
+			a.SetMessage("Visit https://github.com/mingcheng/mp3blasterr")
 		} else {
 			a.setMode(keys.ModeHelp)
 			a.SetMessage("Press '?' to exit help screen.")
@@ -96,7 +93,7 @@ func (a *App) Exec(cmd keys.Command) {
 	case keys.CmdToggleWrap:
 		a.Opts.Wrap = !a.Opts.Wrap
 	case keys.CmdToggleTheme:
-		a.Opts.Theme = theme.Next(a.Opts.Theme)
+		a.Opts.Theme = config.NextTheme(a.Opts.Theme)
 		a.SetMessage("Theme: " + a.Opts.Theme)
 	case keys.CmdToggleNerdFont:
 		a.Opts.NerdFont = !a.Opts.NerdFont
@@ -105,8 +102,8 @@ func (a *App) Exec(cmd keys.Command) {
 		} else {
 			a.SetMessage("Nerd Font icons disabled")
 		}
-	case keys.CmdDel, keys.CmdDelMark:
-		a.deleteItem(cmd == keys.CmdDelMark)
+	case keys.CmdDel:
+		a.deleteItem()
 	case keys.CmdSelect:
 		v := a.MainView()
 		if a.Mode == keys.ModeNormal && !a.Cur.IsGroup(v.Cursor) {
@@ -133,20 +130,20 @@ func (a *App) Exec(cmd keys.Command) {
 		switch a.Mode {
 		case keys.ModeNormal:
 			gv := a.groupView(a.Cur)
-			gv.display = (gv.display + 1) % 3
+			gv.display = gv.display.Next()
 		case keys.ModeFileSelection:
-			a.fmDisplay = (a.fmDisplay + 1) % 3
+			a.fmDisplay = a.fmDisplay.Next()
 		}
 	case keys.CmdSelectFiles:
 		a.fmBegin()
 	case keys.CmdAddGroup:
 		p.QuitAfterPlaylist = false
-		a.Cur.AddGroup(playlist.NewGroup("[Default]"))
+		a.Cur.AddGroup(playlist.NewGroup(defaultGroupTitle))
 	case keys.CmdWritePlaylist:
 		a.openPopup([]string{
 			"Playlist will be saved in: ",
 			a.Opts.PlaylistDir,
-			"(Configuration keyword to set default dir: PlaylistDir)",
+			"(Default dir setting: files.playlist_dir)",
 			"Example filename: myplaylist.lst",
 		}, "", 40, a.writePlaylist)
 	case keys.CmdLoadPlaylist:
@@ -233,14 +230,17 @@ func (a *App) mixerKey(k keys.Key) {
 	}
 }
 
+// setMode switches the program mode; the help bar scrolls back to the top.
 func (a *App) setMode(m keys.Mode) {
 	a.Mode = m
-	a.HelpBar = listview.State{Rows: 4}
+	a.HelpBar = listview.State{Rows: helpBarRows}
 	if m == keys.ModeHelp {
 		a.helpView = listview.State{}
 	}
 }
 
+// pan scrolls the main window horizontally, up to the end of the longest
+// visible line.
 func (a *App) pan(delta int) {
 	if a.Mode == keys.ModeHelp {
 		return
@@ -260,6 +260,7 @@ func (a *App) pan(delta int) {
 // needed to limit horizontal panning.
 func (a *App) SetMainWidth(w int) { a.mainWidth = w }
 
+// enter opens the group under the cursor or plays the song under it.
 func (a *App) enter() {
 	if a.Mode != keys.ModeNormal {
 		return
@@ -278,7 +279,8 @@ func (a *App) enter() {
 	}
 }
 
-func (a *App) deleteItem(mark bool) {
+// deleteItem removes the entry under the cursor from the playlist.
+func (a *App) deleteItem() {
 	if a.Mode != keys.ModeNormal {
 		return
 	}
@@ -298,16 +300,12 @@ func (a *App) deleteItem(mark bool) {
 	if it.Kind == playlist.KindGroup {
 		a.Player.ForgetGroup(it.Group)
 	}
-	if mark && it.Kind == playlist.KindSong && a.Matcher.IsAudio(it.Path) {
-		if err := markBad(it.Path); err != nil {
-			a.Warning("Failed to mark file as bad.")
-		}
-	}
 	a.Cur.Delete(idx)
 	v.Clamp(a.Cur.Len())
 	a.Player.ResetNextSong()
 }
 
+// setGroupName renames the group under the cursor.
 func (a *App) setGroupName(name string) {
 	v := a.MainView()
 	if !a.Cur.IsGroup(v.Cursor) || a.Cur.IsParentLink(v.Cursor) || name == ".." {
@@ -315,197 +313,3 @@ func (a *App) setGroupName(name string) {
 	}
 	a.Cur.SubGroup(v.Cursor).Title = "[" + name + "]"
 }
-
-// --- popups -------------------------------------------------------------------
-
-func (a *App) openPopup(labels []string, initial string, maxLen int, submit func(string)) {
-	a.Popup = &Popup{Labels: labels, Editor: NewLineEditor(initial, maxLen), submit: submit}
-	a.Input = InputText
-	a.SetMessage("Use up and down arrows to toggle insert mode")
-}
-
-// openConfirm shows a yes/no dialog; onYes runs only if the user answers 'y'.
-func (a *App) openConfirm(labels []string, onYes func()) {
-	a.Popup = &Popup{Labels: labels, Confirm: true, onYes: onYes}
-	a.Input = InputConfirm
-	a.SetMessage("Press 'y' to confirm, 'n' or Esc to cancel")
-}
-
-func (a *App) confirmKey(k keys.Key) {
-	switch {
-	case k.Code == tcell.KeyRune && (k.Rune == 'y' || k.Rune == 'Y'):
-		onYes := a.Popup.onYes
-		a.ClosePopup()
-		onYes()
-	case k.Code == tcell.KeyRune && (k.Rune == 'n' || k.Rune == 'N'),
-		k.Code == tcell.KeyEsc, k.Code == tcell.KeyEnter:
-		a.ClosePopup()
-		a.SetMessage("Cancelled.")
-	}
-}
-
-// ClosePopup cancels the popup.
-func (a *App) ClosePopup() {
-	a.Popup = nil
-	a.Input = InputDefault
-	a.Msg = Message{}
-}
-
-func (a *App) popupKey(k keys.Key) {
-	e := a.Popup.Editor
-	switch k.Code {
-	case tcell.KeyLeft:
-		e.Left()
-	case tcell.KeyRight:
-		e.Right()
-	case tcell.KeyUp, tcell.KeyDown:
-		if e.ToggleInsert() {
-			a.SetMessage("--  INSERT --")
-		} else {
-			a.SetMessage("-- REPLACE --")
-		}
-	case tcell.KeyBackspace:
-		e.Backspace()
-	case tcell.KeyDelete:
-		e.Delete()
-	case tcell.KeyHome:
-		e.Home()
-	case tcell.KeyEnd:
-		e.End()
-	case tcell.KeyEsc:
-		a.ClosePopup()
-	case tcell.KeyEnter:
-		submit, text := a.Popup.submit, e.Text()
-		a.ClosePopup()
-		submit(text)
-	case tcell.KeyRune:
-		e.AddChar(k.Rune)
-	}
-}
-
-// --- searching ------------------------------------------------------------------
-
-func (a *App) startSearch() {
-	a.search = ""
-	a.Input = InputSearch
-	a.SetMessage("Search:")
-	a.armSearchTimeout()
-}
-
-func (a *App) armSearchTimeout() {
-	a.searchGen++
-	gen := a.searchGen
-	time.AfterFunc(2*time.Second, func() {
-		a.view.Post(func() {
-			if a.Input == InputSearch && a.searchGen == gen {
-				a.endSearch()
-			}
-		})
-	})
-}
-
-func (a *App) endSearch() {
-	a.search = ""
-	a.Input = InputDefault
-	a.SetMessage("")
-}
-
-const searchChars = " (){}[]<>,.?;:\"'=+-_!@#$%^&*"
-
-func (a *App) searchKey(k keys.Key) {
-	if k.Code == tcell.KeyEnter || k.Code == tcell.KeyEsc {
-		a.endSearch()
-		return
-	}
-	if k.Code != tcell.KeyRune {
-		return
-	}
-	r := k.Rune
-	if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune(searchChars, r) || r > 127) {
-		return
-	}
-	needle := a.search + string(r)
-	found := false
-	n := a.MainLen()
-	for i := 0; i < n; i++ {
-		var name string
-		if a.Mode == keys.ModeNormal {
-			name = a.Cur.Item(i).Name()
-			if a.Cur.Item(i).Kind == playlist.KindSong {
-				name = path.Base(strings.ReplaceAll(name, "\\", "/"))
-			}
-		} else {
-			name = a.fm.Entry(i).Name
-		}
-		if strings.HasPrefix(name, needle) {
-			a.MainView().Set(i, n)
-			found = true
-			break
-		}
-	}
-	a.armSearchTimeout()
-	if !found {
-		a.view.Beep()
-		return
-	}
-	a.search = needle
-	a.SetMessage("Search: " + a.search)
-}
-
-// --- selection by pattern ---------------------------------------------------------
-
-func (a *App) selectByPattern(pattern string) {
-	if pattern == "" {
-		a.Warning("No pattern given.")
-		return
-	}
-	ci := a.Opts.SelectCaseInsensitive
-	var match func(string) bool
-	if a.Opts.SelectRegex {
-		expr := pattern
-		if ci {
-			expr = "(?i)" + expr
-		}
-		re, err := regexp.Compile(expr)
-		if err != nil {
-			a.Warning("Invalid regular expression.")
-			return
-		}
-		match = re.MatchString
-	} else {
-		pat := pattern
-		if ci {
-			pat = strings.ToLower(pat)
-		}
-		match = func(s string) bool {
-			if ci {
-				s = strings.ToLower(s)
-			}
-			ok, _ := path.Match(pat, s)
-			return ok
-		}
-	}
-	switch a.Mode {
-	case keys.ModeNormal:
-		if a.Opts.SelectUnselectFirst {
-			a.Cur.DeselectAll()
-		}
-		for i := 0; i < a.Cur.Len(); i++ {
-			if match(a.MainRow(i).Text) {
-				a.Cur.Select(i)
-			}
-		}
-	case keys.ModeFileSelection:
-		if a.Opts.SelectUnselectFirst {
-			a.fm.DeselectAll()
-		}
-		for i := 0; i < a.fm.Len(); i++ {
-			if match(a.MainRow(i).Text) {
-				a.fm.Select(i)
-			}
-		}
-	}
-}
-
-// PlayModeName returns the play mode for playlist files.
-func playModeName(m playback.PlayMode) string { return m.String() }

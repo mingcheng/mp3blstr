@@ -28,7 +28,7 @@ type Tags struct {
 	Artist, Title, Album, Comment, Year string
 }
 
-// Recoder translates tag text (CharsetTable keyword). nil means identity.
+// Recoder translates tag text (files.charset_table setting). nil means identity.
 type Recoder func(string) string
 
 var (

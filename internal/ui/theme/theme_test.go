@@ -12,7 +12,7 @@ func bgOf(s tcell.Style) tcell.Color {
 }
 
 // TestClassicTransparentBackground checks that the default theme leaves the
-// terminal background visible, and that Color.Default.bg restores an opaque one.
+// terminal background visible, and that ui.colors.default.bg restores an opaque one.
 func TestClassicTransparentBackground(t *testing.T) {
 	th := Classic()
 	for name, s := range map[string]tcell.Style{

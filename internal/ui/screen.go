@@ -4,10 +4,10 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/mingcheng/mp3blaster/internal/app"
-	"github.com/mingcheng/mp3blaster/internal/keys"
-	"github.com/mingcheng/mp3blaster/internal/listview"
-	"github.com/mingcheng/mp3blaster/internal/ui/theme"
+	"github.com/mingcheng/mp3blasterr/internal/app"
+	"github.com/mingcheng/mp3blasterr/internal/keys"
+	"github.com/mingcheng/mp3blasterr/internal/listview"
+	"github.com/mingcheng/mp3blasterr/internal/ui/theme"
 )
 
 // mouseFunc handles a mouse action at (x, y); it returns true when the
@@ -19,7 +19,7 @@ type hitArea struct {
 	fn mouseFunc
 }
 
-// Screen is the root primitive. It draws the complete mp3blaster screen
+// Screen is the root primitive. It draws the complete mp3blasterr screen
 // using the original's character-cell layout and dispatches input to the
 // application.
 type Screen struct {
@@ -94,7 +94,7 @@ func (s *Screen) Draw(scr tcell.Screen) {
 	c.fill(0, 0, w, h, s.th.Default)
 	l := newLayout(w, h, s.width)
 	if l.tooSmall() {
-		msg := "Terminal too small for mp3blaster"
+		msg := "Terminal too small for mp3blasterr"
 		c.put((w-len(msg))/2, h/2, msg, s.th.Default, w)
 		scr.HideCursor()
 		return

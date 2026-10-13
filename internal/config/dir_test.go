@@ -16,11 +16,11 @@ func setHome(t *testing.T) string {
 
 func TestDirAndDefaultPath(t *testing.T) {
 	home := setHome(t)
-	want := filepath.Join(home, ".config", "mp3blaster")
+	want := filepath.Join(home, ".config", "mp3blasterr")
 	if got := Dir(); got != want {
 		t.Fatalf("Dir() = %q, want %q", got, want)
 	}
-	if got := DefaultPath(); got != filepath.Join(want, "mp3blasterrc") {
+	if got := DefaultPath(); got != filepath.Join(want, "config.yaml") {
 		t.Fatalf("DefaultPath() = %q", got)
 	}
 	dir, err := EnsureDir()
@@ -32,31 +32,33 @@ func TestDirAndDefaultPath(t *testing.T) {
 	}
 }
 
-func TestLoadFileDefaultAndLegacy(t *testing.T) {
-	setHome(t)
+func TestLoadFileDefault(t *testing.T) {
+	home := setHome(t)
 
 	o := Default()
-	if err := o.LoadFile(""); err != nil {
-		t.Fatalf("missing default file should not fail: %v", err)
+	if err := o.LoadFile(""); err != nil || o.Path != DefaultPath() {
+		t.Fatalf("missing default file should not fail: path=%q err=%v", o.Path, err)
 	}
 
-	if err := os.WriteFile(LegacyPath(), []byte("Theme = modern\n"), 0o644); err != nil {
+	// Files of the original program are not read any more.
+	if err := os.WriteFile(filepath.Join(home, ".mp3blasterrc"), []byte("Theme = modern\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	o = Default()
-	if err := o.LoadFile(""); err != nil || o.Theme != "modern" {
-		t.Fatalf("legacy fallback: theme=%q err=%v", o.Theme, err)
+	o.Theme = "classic"
+	if err := o.LoadFile(""); err != nil || o.Theme != "classic" || o.Path != DefaultPath() {
+		t.Fatalf("legacy file must be ignored: theme=%q path=%q err=%v", o.Theme, o.Path, err)
 	}
 
 	if _, err := EnsureDir(); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(DefaultPath(), []byte("Theme = classic\n"), 0o644); err != nil {
+	if err := os.WriteFile(DefaultPath(), []byte("ui:\n  theme: modern\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	o = Default()
-	o.Theme = "modern"
-	if err := o.LoadFile(""); err != nil || o.Theme != "classic" {
-		t.Fatalf("new path should win: theme=%q err=%v", o.Theme, err)
+	o.Theme = "classic"
+	if err := o.LoadFile(""); err != nil || o.Theme != "modern" {
+		t.Fatalf("default file: theme=%q err=%v", o.Theme, err)
 	}
 }

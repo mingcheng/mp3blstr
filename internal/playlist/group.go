@@ -1,9 +1,9 @@
-// Package playlist implements mp3blaster's hierarchical playlist: a tree of
+// Package playlist implements mp3blasterr's hierarchical playlist: a tree of
 // groups, each containing songs and sub groups, with the bookkeeping needed
 // to play groups in order or shuffled.
 package playlist
 
-import "github.com/mingcheng/mp3blaster/internal/media"
+import "github.com/mingcheng/mp3blasterr/internal/media"
 
 // Kind distinguishes the entries of a group.
 type Kind int
@@ -24,8 +24,8 @@ type Item struct {
 	Path  string // full path or URL (songs only)
 	Group *Group // target group (groups and parent links)
 
-	played   bool
-	selectID int
+	played   bool // played in the current run (songs only)
+	selectID int  // order in which the item was marked; 0 = not marked
 }
 
 // Name returns the canonical name of the item: the full path for songs and
@@ -47,19 +47,16 @@ func (it *Item) IsGroup() bool { return it.Kind != KindSong }
 // Selected reports whether the item has been marked by the user.
 func (it *Item) Selected() bool { return it.selectID > 0 }
 
-// Played reports whether the song has been played in the current run.
-func (it *Item) Played() bool { return it.played }
-
 // Group is a list of songs and sub groups.
 type Group struct {
 	Title   string
 	Shuffle bool // play the songs of this group in random order
 	Parent  *Group
-	Items   []*Item
+	Items   []*Item // sub groups first; Items[0] is "[..]" in sub groups
 
-	played   bool
-	playing  bool
-	selectID int
+	played   bool // the group has been selected for playing in this run
+	playing  bool // the group is being played
+	selectID int  // selectID of the next item to be marked
 }
 
 // NewGroup returns an empty group.
@@ -142,17 +139,6 @@ func (g *Group) Clear() {
 	}
 	g.Items = keep
 	g.selectID = 1
-}
-
-// Songs returns the paths of all songs in g (not recursive).
-func (g *Group) Songs() []string {
-	var out []string
-	for _, it := range g.Items {
-		if it.Kind == KindSong {
-			out = append(out, it.Path)
-		}
-	}
-	return out
 }
 
 // --- selection -----------------------------------------------------------
@@ -246,9 +232,6 @@ func (g *Group) moveItem(from, to int, before bool) bool {
 }
 
 // --- played state --------------------------------------------------------
-
-// Played reports whether the group has been played in the current run.
-func (g *Group) Played() bool { return g.played }
 
 // SetPlayed sets the played state of the group.
 func (g *Group) SetPlayed(v bool) { g.played = v }
@@ -366,7 +349,7 @@ func (g *Group) UnplayedSong(idx int, setPlayed, recursive bool) *Item {
 	return nil
 }
 
-// ResetSongs sets the played state of all songs to played.
+// ResetSongs sets the played state of all songs (optionally recursively).
 func (g *Group) ResetSongs(recursive, played bool) {
 	for _, it := range g.Items {
 		switch it.Kind {
@@ -448,16 +431,30 @@ func (g *Group) GroupsBefore(target *Group) (before []*Group, ok bool) {
 	return before, true
 }
 
-// DisplayName returns the text shown for entry it in display mode mode:
-// 0 = full path, 1 = file name, 2 = ID3 name. Groups always show their title.
-func DisplayName(it *Item, mode int) string {
+// DisplayMode selects how songs are shown in the playlist window.
+type DisplayMode int
+
+// Display modes, in the order the "toggle display" command cycles through.
+const (
+	DisplayPath     DisplayMode = iota // full path or URL
+	DisplayFileName                    // file name only
+	DisplayID3                         // "[ID3] artist - title" when tagged
+	numDisplayModes
+)
+
+// Next returns the following display mode (wrapping around).
+func (m DisplayMode) Next() DisplayMode { return (m + 1) % numDisplayModes }
+
+// DisplayName returns the text shown for entry it in display mode mode.
+// Groups always show their title.
+func DisplayName(it *Item, mode DisplayMode) string {
 	if it.Kind != KindSong {
 		return it.Name()
 	}
 	switch mode {
-	case 0:
+	case DisplayPath:
 		return it.Path
-	case 2:
+	case DisplayID3:
 		return media.ID3Name(it.Path, it.Path)
 	default:
 		return media.ChopPath(it.Path)

@@ -4,20 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/mingcheng/mp3blaster/internal/filemanager"
-	"github.com/mingcheng/mp3blaster/internal/keys"
-	"github.com/mingcheng/mp3blaster/internal/listview"
-	"github.com/mingcheng/mp3blaster/internal/media"
-	"github.com/mingcheng/mp3blaster/internal/playback"
-	"github.com/mingcheng/mp3blaster/internal/playlist"
+	"github.com/mingcheng/mp3blasterr/internal/filemanager"
+	"github.com/mingcheng/mp3blasterr/internal/keys"
+	"github.com/mingcheng/mp3blasterr/internal/listview"
+	"github.com/mingcheng/mp3blasterr/internal/media"
+	"github.com/mingcheng/mp3blasterr/internal/playback"
+	"github.com/mingcheng/mp3blasterr/internal/playlist"
 )
-
-var markBad = filemanager.MarkBad
 
 // fmBegin enters file selection mode.
 func (a *App) fmBegin() {
@@ -28,10 +25,9 @@ func (a *App) fmBegin() {
 		HideOthers: a.Opts.HideOthers,
 	})
 	a.fmView = listview.State{}
+	a.fmDisplay = filemanager.DisplaySize
 	if a.Opts.ID3Names {
-		a.fmDisplay = 2
-	} else {
-		a.fmDisplay = 1
+		a.fmDisplay = filemanager.DisplayID3
 	}
 	a.setMode(keys.ModeFileSelection)
 }
@@ -83,6 +79,7 @@ func (a *App) fmChangeDir(p string, fromEntry bool) {
 	}
 }
 
+// execFileCommand runs the commands of file selection mode.
 func (a *App) execFileCommand(cmd keys.Command) {
 	if a.Mode != keys.ModeFileSelection {
 		return
@@ -102,20 +99,6 @@ func (a *App) execFileCommand(cmd keys.Command) {
 		a.Opts.SortMode = fm.Sort().Next()
 		fm.SetSort(a.Opts.SortMode)
 		a.fmReload()
-	case keys.CmdFileMarkBad:
-		paths := fm.SelectedPaths()
-		if len(paths) == 0 && fm.Entry(v.Cursor) != nil {
-			paths = []string{fm.Path(v.Cursor)}
-		}
-		moved := 0
-		for _, p := range paths {
-			if a.Matcher.IsAudio(p) && markBad(p) == nil {
-				moved++
-			}
-		}
-		if moved > 0 {
-			a.fmReload()
-		}
 	case keys.CmdFileDelete:
 		if fm.Entry(v.Cursor) == nil || fm.IsDir(v.Cursor) {
 			break
@@ -197,6 +180,7 @@ func scanReporter(report func(TaskProgress)) func(filemanager.Progress) {
 	}
 }
 
+// fmReload re-reads the directory after files were changed.
 func (a *App) fmReload() {
 	if err := a.fm.Reload(); err != nil {
 		a.Warning("Couldn't read directory.")
@@ -204,6 +188,8 @@ func (a *App) fmReload() {
 	a.fmView.Clamp(a.fm.Len())
 }
 
+// fileEnter enters the directory under the cursor, loads the playlist
+// under it or plays the song under it.
 func (a *App) fileEnter() {
 	fm := a.fm
 	i := a.fmView.Cursor
@@ -217,17 +203,16 @@ func (a *App) fileEnter() {
 	case e.Kind == filemanager.KindPlaylist:
 		file := fm.Path(i)
 		a.fmEnd()
-		a.loadPlaylist(file)
+		a.LoadPlaylist(file)
 	case e.Kind == filemanager.KindAudio:
 		a.Player.PlayOne(fm.Path(i))
 	}
 }
 
 // LoadPlaylist adds the songs and groups of a playlist file to the current
-// group (used for --list/--autolist as well).
-func (a *App) LoadPlaylist(file string) bool { return a.loadPlaylist(file) }
-
-func (a *App) loadPlaylist(file string) bool {
+// group (used for --list/--autolist as well). It reports whether the file
+// could be read.
+func (a *App) LoadPlaylist(file string) bool {
 	gs, err := playlist.Load(file, a.Cur)
 	if err != nil {
 		a.Warning("Couldn't load playlist (wrong path?)")
@@ -257,6 +242,7 @@ func (a *App) AddFiles(files []string) {
 	}
 }
 
+// writePlaylist saves the whole playlist as name in the playlist directory.
 func (a *App) writePlaylist(name string) {
 	if name == "" {
 		return
@@ -273,13 +259,14 @@ func (a *App) writePlaylist(name string) {
 		a.Warning("Failed to change to playlist dir.")
 		return
 	}
-	if err := playlist.Save(filepath.Join(dir, name), a.Root, playModeName(a.Player.Mode)); err != nil {
+	if err := playlist.Save(filepath.Join(dir, name), a.Root, a.Player.Mode.String()); err != nil {
 		a.Warning("Failed to write playlist.")
 		return
 	}
 	a.SetMessage("Playlist written.")
 }
 
+// deleteFile deletes a file (after confirmation).
 func (a *App) deleteFile(path string) {
 	if a.Mode != keys.ModeFileSelection {
 		return
@@ -293,6 +280,8 @@ func (a *App) deleteFile(path string) {
 	a.SetMessage("File deleted.")
 }
 
+// renameFile renames the file under the cursor; existing files are never
+// overwritten.
 func (a *App) renameFile(newName string) {
 	if a.Mode != keys.ModeFileSelection {
 		return
@@ -309,13 +298,9 @@ func (a *App) renameFile(newName string) {
 		return
 	}
 	if err := os.Rename(oldPath, newPath); err != nil {
-		var pe *fs.PathError
+		// Show the reason only; the paths don't fit in the message line.
 		msg := err.Error()
-		if errors.As(err, &pe) {
-			msg = pe.Err.Error()
-		}
-		var le *os.LinkError
-		if errors.As(err, &le) {
+		if le, ok := errors.AsType[*os.LinkError](err); ok {
 			msg = le.Err.Error()
 		}
 		a.Warning("Rename failed: " + msg)

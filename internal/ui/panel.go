@@ -10,8 +10,8 @@ import (
 	"github.com/rivo/tview"
 	"github.com/rivo/uniseg"
 
-	"github.com/mingcheng/mp3blaster/internal/keys"
-	"github.com/mingcheng/mp3blaster/internal/media"
+	"github.com/mingcheng/mp3blasterr/internal/keys"
+	"github.com/mingcheng/mp3blasterr/internal/media"
 )
 
 // seg is a piece of text with its own style.

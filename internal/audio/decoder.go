@@ -1,11 +1,13 @@
 package audio
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,25 +17,10 @@ import (
 	"github.com/gopxl/beep/v2/vorbis"
 	"github.com/gopxl/beep/v2/wav"
 
-	"github.com/mingcheng/mp3blaster/internal/media"
+	"github.com/mingcheng/mp3blasterr/internal/media"
 )
 
-// SoundError is one of the classic sound error messages of the original
-// player. Errors returned by this package wrap one of them so callers can
-// show the familiar text (errors.As).
-type SoundError string
-
-func (e SoundError) Error() string { return string(e) }
-
-// Sound errors.
-const (
-	ErrDeviceOpen SoundError = "Failed to open sound device."
-	ErrFileOpen   SoundError = "Failed to open file for reading."
-	ErrFileRead   SoundError = "Failed to read file."
-	ErrHTTP       SoundError = "Http request failed."
-	ErrBadFormat  SoundError = "Bad sound file format."
-)
-
+// format is a supported container/codec.
 type format int
 
 const (
@@ -43,6 +30,7 @@ const (
 	formatFLAC
 )
 
+// formatOf guesses the format from a file name; MP3 is the fallback.
 func formatOf(name string) format {
 	switch strings.ToLower(filepath.Ext(name)) {
 	case ".wav":
@@ -56,15 +44,57 @@ func formatOf(name string) format {
 	}
 }
 
+// formatOfContentType refines the guess with the Content-Type of an HTTP
+// response; fallback is returned when the type says nothing useful.
+func formatOfContentType(ct string, fallback format) format {
+	ct = strings.ToLower(ct)
+	switch {
+	case strings.Contains(ct, "ogg"):
+		return formatVorbis
+	case strings.Contains(ct, "flac"):
+		return formatFLAC
+	case strings.Contains(ct, "wav"):
+		return formatWAV
+	case strings.Contains(ct, "mpeg"):
+		return formatMP3
+	}
+	return fallback
+}
+
+// newDecoder starts decoding rc as the given format. The decoder owns rc
+// and closes it with its Close method.
+func newDecoder(rc io.ReadCloser, f format) (beep.StreamSeekCloser, beep.Format, error) {
+	switch f {
+	case formatWAV:
+		return wav.Decode(rc)
+	case formatVorbis:
+		return vorbis.Decode(rc)
+	case formatFLAC:
+		return flac.Decode(rc)
+	default:
+		return mp3.Decode(rc)
+	}
+}
+
 // decoded is an opened audio stream together with its metadata.
 type decoded struct {
 	stream   beep.StreamSeekCloser
 	format   beep.Format
 	info     media.SongInfo
 	seekable bool
+	// cancel aborts pending network I/O so that closing a stalled stream
+	// never blocks; nil for local files.
+	cancel context.CancelFunc
 }
 
-var httpClient = &http.Client{Timeout: 0, Transport: &http.Transport{ResponseHeaderTimeout: 15 * time.Second}}
+// httpClient fetches streams. There is no overall timeout because streams
+// play indefinitely; only waiting for the response headers is limited. The
+// default transport is cloned to keep proxy support (HTTP_PROXY etc.).
+var httpClient = func() *http.Client {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.ResponseHeaderTimeout = 15 * time.Second
+	return &http.Client{Transport: t}
+}()
 
 // decode opens path (a local file or an http(s) URL).
 func decode(path string) (*decoded, error) {
@@ -73,25 +103,15 @@ func decode(path string) (*decoded, error) {
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("%w (%v)", ErrFileOpen, err)
+		return nil, fmt.Errorf("%w (%v)", media.ErrFileOpen, err)
 	}
-	d := &decoded{seekable: true}
 	kind := formatOf(path)
-	switch kind {
-	case formatWAV:
-		d.stream, d.format, err = wav.Decode(f)
-	case formatVorbis:
-		d.stream, d.format, err = vorbis.Decode(f)
-	case formatFLAC:
-		d.stream, d.format, err = flac.Decode(f)
-	default:
-		d.stream, d.format, err = mp3.Decode(f)
-	}
-	if err != nil {
+	d := &decoded{seekable: true}
+	if d.stream, d.format, err = newDecoder(f, kind); err != nil {
 		f.Close()
-		return nil, fmt.Errorf("%w (%v)", ErrBadFormat, err)
+		return nil, fmt.Errorf("%w (%v)", media.ErrBadFormat, err)
 	}
-	d.info = describe(path, kind, d)
+	d.info = describeFile(path, kind, d)
 	if t, err := media.ReadTags(path); err == nil {
 		d.info.Artist, d.info.Title, d.info.Album = t.Artist, t.Title, t.Album
 		d.info.Comment, d.info.Year = t.Comment, t.Year
@@ -99,18 +119,18 @@ func decode(path string) (*decoded, error) {
 	return d, nil
 }
 
-func describe(path string, kind format, d *decoded) media.SongInfo {
-	info := media.SongInfo{SampleRate: int(d.format.SampleRate)}
+// describeFile collects the stream parameters of a local file.
+func describeFile(path string, kind format, d *decoded) media.SongInfo {
+	info := media.SongInfo{SampleRate: int(d.format.SampleRate), Mode: "mono"}
+	if d.format.NumChannels > 1 {
+		info.Mode = "stereo"
+	}
 	if n := d.stream.Len(); n > 0 && d.format.SampleRate > 0 {
 		info.TotalSeconds = n / int(d.format.SampleRate)
 	}
-	if d.format.NumChannels > 1 {
-		info.Mode = "stereo"
-	} else {
-		info.Mode = "mono"
-	}
 	switch kind {
 	case formatMP3:
+		// beep doesn't expose the MPEG header, so read it ourselves.
 		if f, err := os.Open(path); err == nil {
 			if h, ok := media.ReadMPEGHeader(f); ok {
 				info.Version, info.Layer, info.Bitrate = h.Version, h.Layer, h.Bitrate
@@ -121,6 +141,7 @@ func describe(path string, kind format, d *decoded) media.SongInfo {
 	case formatWAV:
 		info.Bitrate = int(d.format.SampleRate) * d.format.NumChannels * d.format.Precision * 8 / 1000
 	default:
+		// Compressed formats: the average bitrate.
 		if st, err := os.Stat(path); err == nil && info.TotalSeconds > 0 {
 			info.Bitrate = int(st.Size() * 8 / int64(info.TotalSeconds) / 1000)
 		}
@@ -128,58 +149,41 @@ func describe(path string, kind format, d *decoded) media.SongInfo {
 	return info
 }
 
-// readCloser combines a reader with a closer (used for HTTP bodies that are
-// pre-read to sniff the stream header).
-type readCloser struct {
-	io.Reader
-	io.Closer
-}
-
+// decodeHTTP opens a (shoutcast/icecast) stream. Streams are not seekable.
 func decodeHTTP(url string) (*decoded, error) {
-	resp, err := httpClient.Get(url)
+	ctx, cancel := context.WithCancel(context.Background())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w (%v)", ErrHTTP, err)
+		cancel()
+		return nil, fmt.Errorf("%w (%v)", media.ErrHTTP, err)
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("%w (%v)", media.ErrHTTP, err)
 	}
 	if resp.StatusCode/100 != 2 {
 		resp.Body.Close()
-		return nil, fmt.Errorf("%w (%s)", ErrHTTP, resp.Status)
+		cancel()
+		return nil, fmt.Errorf("%w (%s)", media.ErrHTTP, resp.Status)
 	}
-	ct := strings.ToLower(resp.Header.Get("Content-Type"))
-	kind := formatOf(url)
-	switch {
-	case strings.Contains(ct, "ogg"):
-		kind = formatVorbis
-	case strings.Contains(ct, "flac"):
-		kind = formatFLAC
-	case strings.Contains(ct, "wav"):
-		kind = formatWAV
-	case strings.Contains(ct, "mpeg"):
-		kind = formatMP3
-	}
-	d := &decoded{}
-	switch kind {
-	case formatVorbis:
-		d.stream, d.format, err = vorbis.Decode(resp.Body)
-	case formatFLAC:
-		d.stream, d.format, err = flac.Decode(resp.Body)
-	case formatWAV:
-		d.stream, d.format, err = wav.Decode(resp.Body)
-	default:
-		d.stream, d.format, err = mp3.Decode(resp.Body)
-	}
-	if err != nil {
+	kind := formatOfContentType(resp.Header.Get("Content-Type"), formatOf(url))
+	d := &decoded{cancel: cancel}
+	if d.stream, d.format, err = newDecoder(resp.Body, kind); err != nil {
 		resp.Body.Close()
-		return nil, fmt.Errorf("%w (%v)", ErrBadFormat, err)
+		cancel()
+		return nil, fmt.Errorf("%w (%v)", media.ErrBadFormat, err)
 	}
-	d.info = media.SongInfo{SampleRate: int(d.format.SampleRate), Mode: "stereo"}
-	if name := resp.Header.Get("icy-name"); name != "" {
-		d.info.Title = name
+	d.info = media.SongInfo{
+		SampleRate: int(d.format.SampleRate),
+		Mode:       "stereo",
+		Title:      resp.Header.Get("icy-name"),
+		Comment:    resp.Header.Get("icy-description"),
 	}
-	if desc := resp.Header.Get("icy-description"); desc != "" {
-		d.info.Comment = desc
-	}
-	if br := resp.Header.Get("icy-br"); br != "" {
-		fmt.Sscanf(br, "%d", &d.info.Bitrate)
+	// Some servers send "128,128"; the first value is the bitrate.
+	br, _, _ := strings.Cut(resp.Header.Get("icy-br"), ",")
+	if n, err := strconv.Atoi(strings.TrimSpace(br)); err == nil {
+		d.info.Bitrate = n
 	}
 	return d, nil
 }

@@ -1,16 +1,17 @@
 package filemanager
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
-	"github.com/mingcheng/mp3blaster/internal/media"
+	"github.com/mingcheng/mp3blasterr/internal/media"
 )
 
 // Kind classifies directory entries (and selects their colour).
@@ -44,10 +45,11 @@ type Options struct {
 	HideOthers bool // hide files that are neither audio files nor playlists
 }
 
-// Manager lists one directory at a time.
+// Manager lists one directory at a time: "./" and "../" first, then the
+// sub directories (alphabetically) and then the files (in the sort mode).
 type Manager struct {
 	opts    Options
-	dir     string
+	dir     string // cleaned absolute path
 	Entries []*Entry
 }
 
@@ -133,33 +135,36 @@ func (m *Manager) Reload() error {
 		}
 		files = append(files, e)
 	}
-	sort.SliceStable(dirs, func(i, j int) bool {
-		return strings.ToLower(dirs[i].Name) < strings.ToLower(dirs[j].Name)
-	})
+	slices.SortStableFunc(dirs, byNameFold)
 	sortEntries(files, m.opts.Sort)
 	m.Entries = append(dirs, files...)
 	return nil
 }
 
+func byNameFold(a, b *Entry) int {
+	return cmp.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+}
+
+// sortEntries orders files in place; SortNone keeps the directory order.
 func sortEntries(es []*Entry, mode SortMode) {
-	var less func(a, b *Entry) bool
+	var compare func(a, b *Entry) int
 	switch mode {
 	case SortAlpha:
-		less = func(a, b *Entry) bool { return strings.ToLower(a.Name) < strings.ToLower(b.Name) }
+		compare = byNameFold
 	case SortAlphaCase:
-		less = func(a, b *Entry) bool { return a.Name < b.Name }
+		compare = func(a, b *Entry) int { return cmp.Compare(a.Name, b.Name) }
 	case SortModifyNew:
-		less = func(a, b *Entry) bool { return a.ModTime.After(b.ModTime) }
+		compare = func(a, b *Entry) int { return b.ModTime.Compare(a.ModTime) }
 	case SortModifyOld:
-		less = func(a, b *Entry) bool { return a.ModTime.Before(b.ModTime) }
+		compare = func(a, b *Entry) int { return a.ModTime.Compare(b.ModTime) }
 	case SortSizeSmall:
-		less = func(a, b *Entry) bool { return a.Size < b.Size }
+		compare = func(a, b *Entry) int { return cmp.Compare(a.Size, b.Size) }
 	case SortSizeBig:
-		less = func(a, b *Entry) bool { return a.Size > b.Size }
+		compare = func(a, b *Entry) int { return cmp.Compare(b.Size, a.Size) }
 	default:
 		return
 	}
-	sort.SliceStable(es, func(i, j int) bool { return less(es[i], es[j]) })
+	slices.SortStableFunc(es, compare)
 }
 
 // Len returns the number of entries.
@@ -251,9 +256,23 @@ func SizeDesc(size int64) string {
 	}
 }
 
-// DisplayName returns the text for entry i in display mode mode:
-// 0 = name, 1 = size and name, 2 = ID3 name.
-func (m *Manager) DisplayName(i, mode int) string {
+// DisplayMode selects how files are shown.
+type DisplayMode int
+
+// Display modes, in the order the "toggle display" command cycles through.
+const (
+	DisplayPlain DisplayMode = iota // file name
+	DisplaySize                     // size and file name
+	DisplayID3                      // "[ID3] artist - title" for tagged audio files
+	numDisplayModes
+)
+
+// Next returns the following display mode (wrapping around).
+func (d DisplayMode) Next() DisplayMode { return (d + 1) % numDisplayModes }
+
+// DisplayName returns the text for entry i in display mode mode.
+// Directories always show their name.
+func (m *Manager) DisplayName(i int, mode DisplayMode) string {
 	e := m.Entry(i)
 	if e == nil {
 		return ""
@@ -261,14 +280,11 @@ func (m *Manager) DisplayName(i, mode int) string {
 	if e.Kind == KindDir {
 		return e.Name
 	}
-	switch mode {
-	case 1:
+	switch {
+	case mode == DisplaySize:
 		return SizeDesc(e.Size) + " " + e.Name
-	case 2:
-		if e.Kind == KindAudio {
-			return media.ID3Name(m.Path(i), e.Name)
-		}
-		return e.Name
+	case mode == DisplayID3 && e.Kind == KindAudio:
+		return media.ID3Name(m.Path(i), e.Name)
 	default:
 		return e.Name
 	}
@@ -277,6 +293,8 @@ func (m *Manager) DisplayName(i, mode int) string {
 // skipDirs are never descended into by the recursive functions.
 var skipDirs = map[string]bool{".AppleDouble": true, ".resources": true, ".finderinfo": true}
 
+// listDir returns the sub directories and audio files of dir (sorted). It
+// doesn't follow a symlinked dir, which could lead into a cycle, nor /dev.
 func listDir(ctx context.Context, dir string, matcher *media.Matcher) (subdirs, audio []string) {
 	if dir == "/dev" {
 		return nil, nil
@@ -305,8 +323,8 @@ func listDir(ctx context.Context, dir string, matcher *media.Matcher) (subdirs, 
 			audio = append(audio, full)
 		}
 	}
-	sort.Strings(subdirs)
-	sort.Strings(audio)
+	slices.Sort(subdirs)
+	slices.Sort(audio)
 	return subdirs, audio
 }
 
@@ -373,7 +391,7 @@ func CollectAudio(ctx context.Context, dir string, matcher *media.Matcher, repor
 	if err != nil {
 		return nil, err
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out, nil
 }
 
@@ -399,17 +417,4 @@ func DirsAsGroups(ctx context.Context, dir string, matcher *media.Matcher, repor
 		return nil, err
 	}
 	return out, nil
-}
-
-// MarkBad moves file into a "baditems" sub directory next to it.
-func MarkBad(file string) error {
-	dir := filepath.Join(filepath.Dir(file), "baditems")
-	if st, err := os.Stat(dir); err != nil {
-		if err := os.Mkdir(dir, 0o755); err != nil {
-			return err
-		}
-	} else if !st.IsDir() {
-		return fmt.Errorf("%s exists and is not a directory", dir)
-	}
-	return os.Rename(file, filepath.Join(dir, filepath.Base(file)))
 }

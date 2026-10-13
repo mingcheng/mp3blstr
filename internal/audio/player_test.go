@@ -8,7 +8,10 @@ import (
 )
 
 // sliceSource is an in-memory source of n samples whose value is the index.
-type sliceSource struct{ pos, n int }
+type sliceSource struct {
+	pos, n int
+	closed bool
+}
 
 func (s *sliceSource) Stream(b [][2]float64) (int, bool) {
 	if s.pos >= s.n {
@@ -26,7 +29,7 @@ func (s *sliceSource) Err() error       { return nil }
 func (s *sliceSource) Len() int         { return s.n }
 func (s *sliceSource) Position() int    { return s.pos }
 func (s *sliceSource) Seek(p int) error { s.pos = p; return nil }
-func (s *sliceSource) Close() error     { return nil }
+func (s *sliceSource) Close() error     { s.closed = true; return nil }
 func sample(b []byte, i, ch int) float32 {
 	return math.Float32frombits(binary.LittleEndian.Uint32(b[i*frameBytes+ch*4:]))
 }
@@ -53,5 +56,17 @@ func TestPCMReader(t *testing.T) {
 	}
 	if n, err = r.Read(b); n != 2*frameBytes || err != nil || sample(b, 0, 0) != 0.125 {
 		t.Fatalf("Read after seek = %d, %v", n, err)
+	}
+}
+
+func TestPCMReaderClose(t *testing.T) {
+	src := &sliceSource{n: 100}
+	r := &pcmReader{src: src, s: src}
+	r.close()
+	if !src.closed || !r.atEOF() {
+		t.Fatal("close should close the source and end the stream")
+	}
+	if n, err := r.Read(make([]byte, frameBytes)); n != 0 || err != io.EOF || src.pos != 0 {
+		t.Fatalf("Read after close = %d, %v (source read: %v)", n, err, src.pos != 0)
 	}
 }

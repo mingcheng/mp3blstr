@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/mingcheng/mp3blaster/internal/media"
+	"github.com/mingcheng/mp3blasterr/internal/media"
 )
 
 func touch(t *testing.T, p string, size int) {
@@ -44,7 +44,7 @@ func TestManager(t *testing.T) {
 			t.Fatalf("entries %v want %v", got, want)
 		}
 	}
-	if d := fm.DisplayName(3, 1); d != "[  19K] A.mp3" {
+	if d := fm.DisplayName(3, DisplaySize); d != "[  19K] A.mp3" {
 		t.Fatalf("size display %q", d)
 	}
 
@@ -92,12 +92,6 @@ func TestManager(t *testing.T) {
 
 	if err := fm.ChangeDir("Sub"); err != nil || filepath.Base(filepath.Clean(fm.Dir())) != "Sub" {
 		t.Fatalf("chdir: %v %s", err, fm.Dir())
-	}
-	if err := MarkBad(filepath.Join(dir, "b.mp3")); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "baditems", "b.mp3")); err != nil {
-		t.Fatal("not moved to baditems")
 	}
 }
 

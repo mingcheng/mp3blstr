@@ -2,13 +2,15 @@ package playlist
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/mingcheng/mp3blaster/internal/media"
+	"github.com/mingcheng/mp3blasterr/internal/atomicfile"
+	"github.com/mingcheng/mp3blasterr/internal/media"
 )
 
 // GlobalSettings carries the <GLOBAL ...> settings of a playlist file.
@@ -33,11 +35,14 @@ func Load(path string, g *Group) (GlobalSettings, error) {
 	if abs, err := filepath.Abs(base); err == nil {
 		base = abs
 	}
-	isM3U := strings.EqualFold(filepath.Ext(path), ".m3u") || strings.EqualFold(filepath.Ext(path), ".m3u8")
+	ext := filepath.Ext(path)
+	isM3U := strings.EqualFold(ext, ".m3u") || strings.EqualFold(ext, ".m3u8")
 	return Parse(f, g, base, isM3U)
 }
 
-// Parse reads playlist data from r. See Load.
+// Parse reads playlist data from r into g. Besides song paths (one per
+// line), mp3blaster playlists contain <GLOBAL>, <GROUP> and </GROUP> tags;
+// in M3U playlists lines starting with '#' are comments. See Load.
 func Parse(r io.Reader, g *Group, baseDir string, isM3U bool) (GlobalSettings, error) {
 	var gs GlobalSettings
 	cur := g
@@ -90,6 +95,7 @@ func Parse(r io.Reader, g *Group, baseDir string, isM3U bool) (GlobalSettings, e
 	return gs, sc.Err()
 }
 
+// resolve turns a song path of a playlist into a full path or URL.
 func resolve(p, base string) string {
 	if media.IsHTTPStream(p) || filepath.IsAbs(p) || strings.HasPrefix(p, "/") {
 		return p
@@ -101,23 +107,17 @@ func resolve(p, base string) string {
 }
 
 // Save writes root (recursively) to path in mp3blaster's playlist format.
+// The file is replaced atomically, so a failure never leaves a truncated
+// playlist behind.
 func Save(path string, root *Group, playMode string) error {
-	f, err := os.Create(path)
-	if err != nil {
+	var b bytes.Buffer
+	if err := Write(&b, root, playMode); err != nil {
 		return err
 	}
-	w := bufio.NewWriter(f)
-	err = Write(w, root, playMode)
-	if ferr := w.Flush(); err == nil {
-		err = ferr
-	}
-	if cerr := f.Close(); err == nil {
-		err = cerr
-	}
-	return err
+	return atomicfile.Write(path, b.Bytes(), 0o644)
 }
 
-// Write serialises root to w.
+// Write serialises root to w. playMode is stored in the <GLOBAL> tag.
 func Write(w io.Writer, root *Group, playMode string) error {
 	shuffle := ""
 	if root.Shuffle {
@@ -129,10 +129,8 @@ func Write(w io.Writer, root *Group, playMode string) error {
 	return writeGroup(w, root, 0)
 }
 
+// writeGroup writes the entries of g, indented by depth tabs.
 func writeGroup(w io.Writer, g *Group, depth int) error {
-	if depth > 10 {
-		return fmt.Errorf("playlist nesting too deep")
-	}
 	indent := strings.Repeat("\t", depth)
 	for _, it := range g.Items {
 		switch it.Kind {
@@ -162,15 +160,18 @@ func writeGroup(w io.Writer, g *Group, depth int) error {
 	return nil
 }
 
+// escape protects the characters that parseTag treats specially.
 func escape(s string) string {
 	return strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s)
 }
 
+// tag is a parsed playlist tag such as <GROUP NAME="x">.
 type tag struct {
 	name  string
 	attrs [][2]string
 }
 
+// attr returns the value of attribute key (case-insensitive).
 func (t tag) attr(key string) (string, bool) {
 	for _, a := range t.attrs {
 		if strings.EqualFold(a[0], key) {

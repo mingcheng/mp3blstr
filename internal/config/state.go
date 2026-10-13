@@ -1,57 +1,53 @@
 package config
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"go.yaml.in/yaml/v3"
+
+	"github.com/mingcheng/mp3blasterr/internal/atomicfile"
 )
 
-// Setting is a "Keyword = value" line of the configuration file. An empty
-// Value removes the keyword from the file.
+// Setting is a setting of the configuration file, named by its dotted path
+// ("playback.volume"). An empty Value removes the setting from the file.
 type Setting struct {
 	Name  string
 	Value string
 }
 
-// savedMarker introduces the settings appended by SaveSettings.
-const savedMarker = "# Saved automatically by mp3blaster on exit (SaveState = no disables this)."
+// savedComment heads a configuration file created by SaveSettings.
+const savedComment = "Saved automatically by mp3blasterr on exit (state.save: false disables this)."
 
 // SessionPath returns the file holding the playlist of the last session.
 func SessionPath() string { return filepath.Join(Dir(), "session.lst") }
 
-// StateSettings returns the options that mp3blaster remembers between
+// StateSettings returns the options that mp3blasterr remembers between
 // sessions, as configuration file settings.
 func (o *Options) StateSettings() []Setting {
-	yn := func(v bool) string {
-		if v {
-			return "yes"
-		}
-		return "no"
-	}
-	playMode := o.PlayMode.String()
-	if playMode == "unknown" {
-		playMode = ""
-	}
 	pos := ""
 	if o.LastSong != "" {
 		pos = strconv.Itoa(o.LastPosition)
 	}
 	return []Setting{
-		{"Theme", o.Theme},
-		{"NerdFont", yn(o.NerdFont)},
-		{"WrapAround", yn(o.Wrap)},
-		{"Threads", strconv.Itoa(o.Threads)},
-		{"File.SortMode", o.SortMode.String()},
-		{"PlayMode", playMode},
-		{"Repeat", yn(o.Repeat)},
-		{"Volume", strconv.Itoa(o.Volume)},
-		{"Balance", strconv.Itoa(o.Balance)},
-		{"LastDir", o.LastDir},
-		{"LastSong", o.LastSong},
-		{"LastPosition", pos},
+		{"ui.theme", o.Theme},
+		{"ui.nerd_font", strconv.FormatBool(o.NerdFont)},
+		{"ui.wrap_around", strconv.FormatBool(o.Wrap)},
+		{"playback.threads", strconv.Itoa(o.Threads)},
+		{"files.sort_mode", o.SortMode.String()},
+		{"playback.play_mode", o.PlayMode.String()},
+		{"playback.repeat", strconv.FormatBool(o.Repeat)},
+		{"playback.volume", strconv.Itoa(o.Volume)},
+		{"playback.balance", strconv.Itoa(o.Balance)},
+		{"state.last_dir", o.LastDir},
+		{"state.last_song", o.LastSong},
+		{"state.last_position", pos},
 	}
 }
 
@@ -71,49 +67,21 @@ func ChangedSettings(before, now []Setting) []Setting {
 	return out
 }
 
-// escapeValue protects the characters that splitValues treats specially.
-func escapeValue(v string) string {
-	return strings.NewReplacer(`\`, `\\`, `,`, `\,`).Replace(v)
-}
-
-// lineKeyword returns the lower case keyword of an active configuration
-// line, or "" for blank lines and comments.
-func lineKeyword(line string) string {
-	t := strings.TrimSpace(line)
-	if t == "" || t[0] == '#' {
-		return ""
-	}
-	name, _, ok := strings.Cut(t, "=")
-	if !ok {
-		return ""
-	}
-	return strings.ToLower(strings.TrimSpace(name))
-}
-
-// SaveSettings writes settings into the configuration file at path. The
-// last active line of each keyword is updated in place (keeping comments and
-// the rest of the file); settings not present yet are appended after a
-// marker comment. The file is created when it does not exist; symbolic links
-// are followed.
+// SaveSettings writes settings into the YAML configuration file at path.
+// Existing values are updated in place and removed settings lose their
+// line; new settings are added to their section, which is created at the
+// end of the file when needed. Comments, blank lines and all other content
+// are kept (documents that cannot be edited line by line, such as flow
+// style ones, are re-encoded instead). The file is created when it does
+// not exist, and replaced atomically otherwise; symbolic links are
+// followed.
 func SaveSettings(path string, settings []Setting) error {
 	if len(settings) == 0 {
 		return nil
 	}
-	if p, err := filepath.EvalSymlinks(path); err == nil {
-		path = p
-	}
-	mode := fs.FileMode(0o644)
-	var lines []string
 	data, err := os.ReadFile(path)
 	switch {
 	case err == nil:
-		if st, err := os.Stat(path); err == nil {
-			mode = st.Mode().Perm()
-		}
-		text := strings.TrimSuffix(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n")
-		if text != "" {
-			lines = strings.Split(text, "\n")
-		}
 	case errors.Is(err, fs.ErrNotExist):
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return err
@@ -121,68 +89,126 @@ func SaveSettings(path string, settings []Setting) error {
 	default:
 		return err
 	}
-
-	var appended []string
-	for _, s := range settings {
-		key := strings.ToLower(s.Name)
-		last := -1
-		for i, l := range lines {
-			if lineKeyword(l) == key {
-				last = i
-			}
-		}
-		if s.Value == "" {
-			kept := lines[:0]
-			for _, l := range lines {
-				if lineKeyword(l) != key {
-					kept = append(kept, l)
-				}
-			}
-			lines = kept
-			continue
-		}
-		if last >= 0 {
-			l := lines[last]
-			indent := l[:len(l)-len(strings.TrimLeft(l, " \t"))]
-			name, _, _ := strings.Cut(strings.TrimSpace(l), "=")
-			lines[last] = indent + strings.TrimSpace(name) + " = " + escapeValue(s.Value)
-			continue
-		}
-		appended = append(appended, s.Name+" = "+escapeValue(s.Value))
+	text := strings.ReplaceAll(string(data), "\r\n", "\n")
+	out, err := editText(text, settings)
+	if errors.Is(err, errUnsupported) {
+		out, err = rewriteDocument([]byte(text), settings)
 	}
-	if len(appended) > 0 {
-		hasMarker := false
-		for _, l := range lines {
-			if l == savedMarker {
-				hasMarker = true
-				break
-			}
-		}
-		if !hasMarker {
-			if len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) != "" {
-				lines = append(lines, "")
-			}
-			lines = append(lines, savedMarker)
-		}
-		lines = append(lines, appended...)
-	}
-
-	out := strings.Join(lines, "\n") + "\n"
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".mp3blasterrc-*")
 	if err != nil {
-		return err
+		return fmt.Errorf("%s: %w", path, err)
 	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.WriteString(out); err != nil {
-		tmp.Close()
-		return err
+	return atomicfile.Write(path, []byte(out), 0o644)
+}
+
+// rewriteDocument applies settings to the decoded document and encodes it
+// again. Comments survive, but blank lines and the original formatting do
+// not.
+func rewriteDocument(data []byte, settings []Setting) (string, error) {
+	doc, err := editableDocument(data)
+	if err != nil {
+		return "", err
 	}
-	if err := tmp.Chmod(mode); err != nil {
-		tmp.Close()
-		return err
+	root := doc.Content[0]
+	for _, s := range settings {
+		segs := strings.Split(strings.ToLower(s.Name), ".")
+		if s.Value == "" {
+			removeSetting(root, segs)
+			continue
+		}
+		setSetting(root, segs, &yaml.Node{Kind: yaml.ScalarNode, Tag: yamlTag(s.Name), Value: s.Value})
 	}
-	if err := tmp.Close(); err != nil {
-		return err
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(doc); err != nil {
+		return "", err
 	}
-	return os.Rename(tmp.Name(), path)
+	if err := enc.Close(); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
+// editableDocument decodes data into a document whose root is a mapping.
+func editableDocument(data []byte) (*yaml.Node, error) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil, err
+	}
+	if doc.Kind != yaml.DocumentNode {
+		doc = yaml.Node{Kind: yaml.DocumentNode}
+	}
+	if len(doc.Content) == 0 {
+		doc.Content = []*yaml.Node{{Kind: yaml.MappingNode}}
+		if len(bytes.TrimSpace(data)) == 0 {
+			doc.HeadComment = savedComment
+		}
+	}
+	root := doc.Content[0]
+	if isNull(root) {
+		*root = yaml.Node{Kind: yaml.MappingNode, HeadComment: root.HeadComment,
+			LineComment: root.LineComment, FootComment: root.FootComment}
+	}
+	if root.Kind != yaml.MappingNode {
+		return nil, fmt.Errorf("line %d: the configuration must be a YAML mapping of settings", root.Line)
+	}
+	return &doc, nil
+}
+
+// lookup returns the index of the value of name in the mapping m, or -1.
+// Names are matched case-insensitively; the last match wins, as for
+// duplicated keys.
+func lookup(m *yaml.Node, name string) int {
+	idx := -1
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		if strings.EqualFold(m.Content[i].Value, name) {
+			idx = i + 1
+		}
+	}
+	return idx
+}
+
+// setSetting stores val at the path segs below the mapping m, creating the
+// missing sections. Comments of a replaced value are kept.
+func setSetting(m *yaml.Node, segs []string, val *yaml.Node) {
+	for len(segs) > 1 {
+		i := lookup(m, segs[0])
+		if i < 0 {
+			child := &yaml.Node{Kind: yaml.MappingNode}
+			m.Content = append(m.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: segs[0]}, child)
+			m, segs = child, segs[1:]
+			continue
+		}
+		if child := m.Content[i]; child.Kind != yaml.MappingNode {
+			m.Content[i] = &yaml.Node{Kind: yaml.MappingNode, LineComment: child.LineComment, FootComment: child.FootComment}
+		}
+		m, segs = m.Content[i], segs[1:]
+	}
+	if i := lookup(m, segs[0]); i >= 0 {
+		old := m.Content[i]
+		val.HeadComment, val.LineComment, val.FootComment = old.HeadComment, old.LineComment, old.FootComment
+		m.Content[i] = val
+		return
+	}
+	m.Content = append(m.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: segs[0]}, val)
+}
+
+// removeSetting deletes the setting at the path segs below the mapping m,
+// and the sections that become empty because of it.
+func removeSetting(m *yaml.Node, segs []string) {
+	i := lookup(m, segs[0])
+	if i < 0 {
+		return
+	}
+	if len(segs) > 1 {
+		child := m.Content[i]
+		if child.Kind != yaml.MappingNode {
+			return
+		}
+		removeSetting(child, segs[1:])
+		if len(child.Content) > 0 {
+			return
+		}
+	}
+	m.Content = append(m.Content[:i-1], m.Content[i+1:]...)
 }

@@ -51,8 +51,8 @@ func TestLookupByMode(t *testing.T) {
 	if tb.Lookup(f1, ModeNormal) != CmdSelectFiles || tb.Lookup(f1, ModeFileSelection) != CmdFileAddFiles {
 		t.Fatal("F1 must depend on the mode")
 	}
-	if tb.Lookup(Rune('D'), ModeNormal) != CmdDelMark || tb.Lookup(Rune('D'), ModeFileSelection) != CmdFileDelete {
-		t.Fatal("D must depend on the mode")
+	if tb.Lookup(Rune('D'), ModeNormal) != CmdNone || tb.Lookup(Rune('D'), ModeFileSelection) != CmdFileDelete {
+		t.Fatal("D must only delete files in file mode")
 	}
 	if tb.Lookup(Rune('q'), ModeHelp) != CmdQuitProgram {
 		t.Fatal("q is valid everywhere")

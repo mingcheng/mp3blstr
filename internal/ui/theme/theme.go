@@ -142,26 +142,12 @@ func Modern() Theme {
 	}
 }
 
-// Names lists the built-in themes in switching order.
-var Names = []string{"classic", "modern"}
-
 // Canonical returns the name of the theme ByName would pick for name.
 func Canonical(name string) string {
 	if strings.EqualFold(name, "modern") {
 		return "modern"
 	}
 	return "classic"
-}
-
-// Next returns the theme following name in Names (wrapping around).
-func Next(name string) string {
-	cur := Canonical(name)
-	for i, n := range Names {
-		if n == cur {
-			return Names[(i+1)%len(Names)]
-		}
-	}
-	return Names[0]
 }
 
 // ByName returns the named theme (classic when unknown).
@@ -172,8 +158,8 @@ func ByName(name string) Theme {
 	return Classic()
 }
 
-// ApplyColours applies Color.* overrides from the configuration file. Keys
-// are lower case without the "color." prefix, e.g. "popup.bg".
+// ApplyColours applies the ui.colors overrides from the configuration file.
+// Keys are lower case without underscores, e.g. "popupinput.bg".
 func (t *Theme) ApplyColours(m map[string]string) {
 	fgbg := func(s *tcell.Style, key string) {
 		if v, ok := m[key+".fg"]; ok {

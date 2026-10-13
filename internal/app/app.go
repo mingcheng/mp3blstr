@@ -1,4 +1,4 @@
-// Package app implements mp3blaster's behaviour independently of the
+// Package app implements mp3blasterr's behaviour independently of the
 // terminal toolkit: program modes, the command set, popups, the playlist
 // window, the file manager and the help screen. The ui package renders this
 // state and feeds key presses and mouse clicks into it.
@@ -7,19 +7,20 @@ package app
 import (
 	_ "embed"
 	"fmt"
+	"io"
 	"log/slog"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/mingcheng/mp3blaster/internal/audio"
-	"github.com/mingcheng/mp3blaster/internal/config"
-	"github.com/mingcheng/mp3blaster/internal/filemanager"
-	"github.com/mingcheng/mp3blaster/internal/keys"
-	"github.com/mingcheng/mp3blaster/internal/listview"
-	"github.com/mingcheng/mp3blaster/internal/media"
-	"github.com/mingcheng/mp3blaster/internal/playback"
-	"github.com/mingcheng/mp3blaster/internal/playlist"
+	"github.com/mingcheng/mp3blasterr/internal/audio"
+	"github.com/mingcheng/mp3blasterr/internal/config"
+	"github.com/mingcheng/mp3blasterr/internal/filemanager"
+	"github.com/mingcheng/mp3blasterr/internal/keys"
+	"github.com/mingcheng/mp3blasterr/internal/listview"
+	"github.com/mingcheng/mp3blasterr/internal/media"
+	"github.com/mingcheng/mp3blasterr/internal/playback"
+	"github.com/mingcheng/mp3blasterr/internal/playlist"
 )
 
 //go:embed help.txt
@@ -27,7 +28,9 @@ var helpText string
 
 // View is implemented by the user interface.
 type View interface {
-	Post(func()) // run f on the UI goroutine
+	// Post runs f on the UI goroutine and redraws the screen. It may block
+	// until f has run, so it must only be called from other goroutines.
+	Post(f func())
 	Beep()
 	Sync() // redraw the whole screen (^L)
 	Quit()
@@ -57,8 +60,8 @@ type Popup struct {
 	Labels  []string
 	Editor  *LineEditor
 	Confirm bool
-	submit  func(string)
-	onYes   func()
+	submit  func(string) // called with the text on Enter
+	onYes   func()       // called when a confirmation is answered with 'y'
 }
 
 // RowKind tells the renderer how to colour a line of the main window.
@@ -83,10 +86,14 @@ type Row struct {
 	Playing bool
 }
 
+// groupView is the view state of a playlist group in the main window.
 type groupView struct {
 	state   listview.State
-	display int
+	display playlist.DisplayMode
 }
+
+// helpBarRows is the height of the key overview at the top of the screen.
+const helpBarRows = 4
 
 // App is the application state.
 type App struct {
@@ -110,59 +117,83 @@ type App struct {
 
 	views map[*playlist.Group]*groupView
 
-	fm        *filemanager.Manager
+	// File selection mode.
+	fm        *filemanager.Manager // nil until the first fmBegin
 	fmView    listview.State
-	fmDisplay int
+	fmDisplay filemanager.DisplayMode
 	fmDir     string
 	startDir  string   // fmDir at start; LastDir is saved when it changed
 	pending   []string // files selected in other directories
 	captured  bool     // CaptureState ran
 
+	// Help mode.
 	help     []string
 	helpView listview.State
 
+	// Incremental search ('/').
 	search    string
-	searchGen int
+	searchGen int // invalidates the timeouts of earlier keystrokes
 
 	statusFile string
-	statusSig  string
-	mainWidth  int
+	statusSig  string // last state written to statusFile
+	mainWidth  int    // columns of the main window, for panning
 
 	view View
 	log  *slog.Logger
 }
 
-// New creates the application. backend opens songs for the player.
-func New(opts *config.Options, km *keys.Table, matcher *media.Matcher, mixer *audio.Mixer,
-	backend playback.Backend, view View, startDir, statusFile string, log *slog.Logger) *App {
-	root := playlist.NewGroup("[Default]")
+// defaultGroupTitle is the title of the root group and of new groups.
+const defaultGroupTitle = "[Default]"
+
+// Deps are the collaborators and settings an App is created with.
+type Deps struct {
+	Options    *config.Options
+	Keys       *keys.Table
+	Matcher    *media.Matcher
+	Mixer      *audio.Mixer     // nil disables the mixer
+	Backend    playback.Backend // opens songs for the player
+	View       View
+	StartDir   string       // initial directory of the file manager
+	StatusFile string       // --status-file; "" for none
+	Logger     *slog.Logger // nil discards debug output
+}
+
+// New creates the application.
+func New(d Deps) *App {
+	root := playlist.NewGroup(defaultGroupTitle)
+	log := d.Logger
+	if log == nil {
+		log = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
 	a := &App{
-		Opts:       opts,
-		Keys:       km,
-		Matcher:    matcher,
-		Mixer:      mixer,
+		Opts:       d.Options,
+		Keys:       d.Keys,
+		Matcher:    d.Matcher,
+		Mixer:      d.Mixer,
 		Root:       root,
 		Cur:        root,
 		Mode:       keys.ModeNormal,
+		HelpBar:    listview.State{Rows: helpBarRows},
 		views:      map[*playlist.Group]*groupView{},
-		fmDir:      startDir,
-		startDir:   startDir,
-		statusFile: statusFile,
-		view:       view,
+		fmDir:      d.StartDir,
+		startDir:   d.StartDir,
+		statusFile: d.StatusFile,
+		view:       d.View,
 		log:        log,
-		help:       append(strings.Split(strings.TrimRight(helpText, "\n"), "\n"), keyReference(km)...),
+		help:       append(strings.Split(strings.TrimRight(helpText, "\n"), "\n"), keyReference(d.Keys)...),
 	}
-	a.HelpBar.Rows = 4
-	a.Player = playback.New(root, backend, view.Post, (*listener)(a))
-	a.Player.Mode = opts.PlayMode
-	a.Player.Repeat = opts.Repeat
-	a.Player.SkipSeconds = opts.SkipSeconds
+	a.Player = playback.New(root, d.Backend, d.View.Post, (*listener)(a))
+	a.Player.Mode = d.Options.PlayMode
+	a.Player.Repeat = d.Options.Repeat
+	a.Player.SkipSeconds = d.Options.SkipSeconds
 	a.SetMessage("Press '?' to get help on available commands")
 	return a
 }
 
 // --- playback listener ------------------------------------------------------
 
+// listener implements playback.Listener for the App without adding these
+// methods to the App's own API.
 type listener App
 
 func (l *listener) Changed()           { (*App)(l).playerChanged() }
@@ -175,7 +206,7 @@ func (l *listener) CurrentGroup() *playlist.Group {
 }
 
 // SongStarted shows the album and comment of the new song in the message
-// line, like set_song_info does.
+// line, like set_song_info does in the original.
 func (l *listener) SongStarted(info media.SongInfo) {
 	album, comment := info.Album, info.Comment
 	if album == "" {
@@ -187,6 +218,7 @@ func (l *listener) SongStarted(info media.SongInfo) {
 	(*App)(l).SetMessage(album + " (" + comment + ")")
 }
 
+// playerChanged rewrites the status file when the state it shows changed.
 func (a *App) playerChanged() {
 	if a.statusFile == "" {
 		return
@@ -197,7 +229,7 @@ func (a *App) playerChanged() {
 		return
 	}
 	a.statusSig = sig
-	if err := a.Player.WriteStatusFile(a.statusFile); err != nil && a.log != nil {
+	if err := a.Player.WriteStatusFile(a.statusFile); err != nil {
 		a.log.Debug("status file", "err", err)
 	}
 }
@@ -257,16 +289,21 @@ func (a *App) RestoreSession(path string) {
 
 // WriteSession saves the playlist for RestoreSession.
 func (a *App) WriteSession(path string) error {
-	return playlist.Save(path, a.Root, playModeName(a.Player.Mode))
+	return playlist.Save(path, a.Root, a.Player.Mode.String())
 }
 
-// Tick is called periodically by the UI to update the play time.
-func (a *App) Tick() bool { return a.Player.Tick() }
+// Tick is called periodically by the UI to update the play time. It
+// reports whether the screen needs to be redrawn: the play time changed
+// or a progress dialog is animating.
+func (a *App) Tick() bool { return a.Player.Tick() || a.Task != nil }
 
-// TickInterval is the display refresh interval derived from --runframes:
-// one MPEG frame lasts about 26ms.
+// mpegFrameDuration is the length of an MPEG audio frame at 44.1 kHz.
+const mpegFrameDuration = 26 * time.Millisecond
+
+// TickInterval is the display refresh interval derived from --runframes
+// (frames decoded per loop in the original).
 func (a *App) TickInterval() time.Duration {
-	return time.Duration(a.Opts.FPL) * 26 * time.Millisecond * 2
+	return time.Duration(a.Opts.FPL) * 2 * mpegFrameDuration
 }
 
 // --- main window ------------------------------------------------------------
@@ -315,9 +352,6 @@ func (a *App) MainTitle() string {
 		return a.Cur.Title
 	}
 }
-
-// MainHighlight reports whether the selection bar is drawn.
-func (a *App) MainHighlight() bool { return true }
 
 // MainRow returns line i of the main window.
 func (a *App) MainRow(i int) Row {

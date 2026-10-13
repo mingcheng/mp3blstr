@@ -89,7 +89,6 @@ func Default() *Table {
 		entry{r('m'), CmdMoveAfter, N, "Move Files After"},
 		entry{r('M'), CmdMoveBefore, N, "Move Files Before"},
 		entry{r('d'), CmdDel, N, "Delete"},
-		entry{r('D'), CmdDelMark, N, "Delete And Mark"},
 	)
 	add(GroupFiles, false,
 		entry{f(1), CmdFileAddFiles, F, "Add Files To List"},
@@ -101,7 +100,6 @@ func Default() *Table {
 		entry{r('s'), CmdFileToggleSort, F, "Toggle File Sort"},
 		entry{r('r'), CmdFileRename, F, "Rename File"},
 		entry{r('D'), CmdFileDelete, F, "Delete file"},
-		entry{r('b'), CmdFileMarkBad, F, "Mark file(s) as bad"},
 	)
 	add(GroupPlayback, false,
 		entry{r('R'), CmdToggleRepeat, A, "Toggle Repeat"},
@@ -155,7 +153,7 @@ func Default() *Table {
 	)
 	add(GroupGeneral, false,
 		entry{r('?'), CmdHelp, A, "Show Help"},
-		entry{r('q'), CmdQuitProgram, A, "Quit Mp3blaster"},
+		entry{r('q'), CmdQuitProgram, A, "Quit mp3blasterr"},
 		entry{s(tcell.KeyCtrlL), CmdRefresh, A, "Refresh Screen"},
 	)
 	// Shown as "( - )" and "( + )" next to the help bar.

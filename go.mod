@@ -1,4 +1,4 @@
-module github.com/mingcheng/mp3blaster
+module github.com/mingcheng/mp3blasterr
 
 go 1.27.2
 
@@ -10,6 +10,7 @@ require (
 	github.com/rivo/tview v0.42.0
 	github.com/rivo/uniseg v0.4.7
 	github.com/spf13/pflag v1.0.10
+	go.yaml.in/yaml/v3 v3.0.5
 )
 
 require (

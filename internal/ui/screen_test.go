@@ -7,14 +7,14 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 
-	"github.com/mingcheng/mp3blaster/internal/app"
-	"github.com/mingcheng/mp3blaster/internal/audio"
-	"github.com/mingcheng/mp3blaster/internal/config"
-	"github.com/mingcheng/mp3blaster/internal/keys"
-	"github.com/mingcheng/mp3blaster/internal/listview"
-	"github.com/mingcheng/mp3blaster/internal/media"
-	"github.com/mingcheng/mp3blaster/internal/playback"
-	"github.com/mingcheng/mp3blaster/internal/ui/theme"
+	"github.com/mingcheng/mp3blasterr/internal/app"
+	"github.com/mingcheng/mp3blasterr/internal/audio"
+	"github.com/mingcheng/mp3blasterr/internal/config"
+	"github.com/mingcheng/mp3blasterr/internal/keys"
+	"github.com/mingcheng/mp3blasterr/internal/listview"
+	"github.com/mingcheng/mp3blasterr/internal/media"
+	"github.com/mingcheng/mp3blasterr/internal/playback"
+	"github.com/mingcheng/mp3blasterr/internal/ui/theme"
 )
 
 type nullView struct{}
@@ -43,7 +43,15 @@ func renderWidth(t *testing.T, w, h int, listWidth listview.Width, setup func(*a
 	defer sim.Fini()
 	sim.SetSize(w, h)
 	m, _ := media.NewMatcher(nil, nil)
-	a := app.New(config.Default(), keys.Default(), m, audio.NewMixer(), nullBackend{}, nullView{}, t.TempDir(), "", nil)
+	a := app.New(app.Deps{
+		Options:  config.Default(),
+		Keys:     keys.Default(),
+		Matcher:  m,
+		Mixer:    audio.NewMixer(),
+		Backend:  nullBackend{},
+		View:     nullView{},
+		StartDir: t.TempDir(),
+	})
 	if setup != nil {
 		setup(a)
 	}

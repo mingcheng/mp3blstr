@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mingcheng/mp3blaster/internal/media"
-	"github.com/mingcheng/mp3blaster/internal/playlist"
+	"github.com/mingcheng/mp3blasterr/internal/media"
+	"github.com/mingcheng/mp3blasterr/internal/playlist"
 )
 
 type fakeTrack struct {
@@ -23,7 +23,6 @@ func (t *fakeTrack) Stop()                 { t.stopped = true }
 func (t *fakeTrack) Done() <-chan struct{} { return t.done }
 func (t *fakeTrack) Info() media.SongInfo  { return media.SongInfo{TotalSeconds: 60} }
 func (t *fakeTrack) Elapsed() int          { return t.pos }
-func (t *fakeTrack) Total() int            { return 60 }
 func (t *fakeTrack) Seek(d int) error      { t.pos += d; return nil }
 func (t *fakeTrack) SeekFromEnd(int) error { return nil }
 func (t *fakeTrack) Err() error            { return nil }

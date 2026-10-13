@@ -1,4 +1,4 @@
-BINARY  := mp3blaster
+BINARY  := mp3blasterr
 VERSION ?= $(shell git describe --tags --always 2>/dev/null || echo 3.2.6-go)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 # purego (used by oto) needs this flag to build without cgo on FreeBSD/NetBSD;
@@ -15,7 +15,7 @@ export CGO_ENABLED := 0
 all: vet test build
 
 build:
-	$(GOBUILD) -o bin/$(BINARY) ./cmd/mp3blaster
+	$(GOBUILD) -o bin/$(BINARY) ./cmd/mp3blasterr
 
 test:
 	go test ./...
@@ -34,7 +34,7 @@ cross:
 	@for t in $(TARGETS); do \
 		os=$${t%/*}; arch=$${t#*/}; ext=; [ $$os = windows ] && ext=.exe; \
 		echo "build $$os/$$arch"; \
-		GOOS=$$os GOARCH=$$arch $(GOBUILD) -o bin/$(BINARY)-$$os-$$arch$$ext ./cmd/mp3blaster || exit 1; \
+		GOOS=$$os GOARCH=$$arch $(GOBUILD) -o bin/$(BINARY)-$$os-$$arch$$ext ./cmd/mp3blasterr || exit 1; \
 	done
 
 clean:
