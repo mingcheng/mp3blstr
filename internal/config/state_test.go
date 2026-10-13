@@ -202,7 +202,7 @@ func TestStateSettingsRoundTrip(t *testing.T) {
 	o := Default()
 	o.Theme, o.NerdFont, o.Wrap, o.Threads = "modern", true, false, 300
 	o.SortMode, o.PlayMode, o.Repeat = filemanager.SortSizeBig, playback.PlaySongs, true
-	o.FadeOut = false
+	o.FadeOut = true
 	o.Volume, o.Balance = 42, 60
 	o.LastDir, o.LastSong, o.LastPosition = "/music", "/music/a, b #1: 'x'.mp3", 95
 

@@ -78,8 +78,11 @@ func TestFadeOutSeekAndToggle(t *testing.T) {
 	var position int64
 	r := &pcmReader{src: src, s: mixer.fadeOut(src, 8, 4, &position), fadePosition: &position, sourceRate: int64(OutputRate)}
 	buf := make([]byte, 8*frameBytes)
-	if n, err := r.Read(buf); n != len(buf) || err != nil {
-		t.Fatalf("Read = %d, %v", n, err)
+	for offset := 0; offset < len(buf); offset += 2 * frameBytes {
+		chunk := buf[offset : offset+2*frameBytes]
+		if n, err := r.Read(chunk); n != len(chunk) || err != nil {
+			t.Fatalf("Read = %d, %v", n, err)
+		}
 	}
 	for index, gain := range []float32{1, 1, 1, 1, 1, .75, .5, .25} {
 		want := float32(index) / 8 * gain
@@ -96,5 +99,22 @@ func TestFadeOutSeekAndToggle(t *testing.T) {
 	mixer.SetFade(false)
 	if _, err := r.Read(buf[:frameBytes]); err != nil || sample(buf, 0, 0) != .875 {
 		t.Fatalf("fade disabled = %v, %v", sample(buf, 0, 0), err)
+	}
+}
+
+func TestFadeDurationFrames(t *testing.T) {
+	for _, tc := range []struct {
+		track, seconds, want int64
+	}{
+		{4*int64(OutputRate) + int64(OutputRate) - 1, 2, 0},
+		{5 * int64(OutputRate), 2, 2 * int64(OutputRate)},
+		{6 * int64(OutputRate), 7, 0},
+		{6 * int64(OutputRate), 5, 5 * int64(OutputRate)},
+		{6 * int64(OutputRate), 0, 0},
+		{0, 5, 0},
+	} {
+		if got := fadeDurationFrames(tc.track, int(tc.seconds)); got != tc.want {
+			t.Errorf("fadeDurationFrames(%d, %d) = %d, want %d", tc.track, tc.seconds, got, tc.want)
+		}
 	}
 }

@@ -37,7 +37,7 @@ ui:
 playback:
   # play_mode: allgroups     # onegroup, allgroups or allrandom
   # repeat: false
-  # fade_out: true           # fade out at the end of known-length tracks (toggle: V)
+  # fade_out: false          # fade out at the end of known-length tracks (toggle: V)
   # fade_seconds: 5          # fade duration in seconds (config file only, 0 disables)
   # skip_length: 10          # seconds skipped by rewind/forward
   # threads: 100             # read-ahead buffer in frames (0..500, step 50)

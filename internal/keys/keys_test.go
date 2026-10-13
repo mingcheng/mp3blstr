@@ -75,6 +75,9 @@ func TestRepeatShuffleKeys(t *testing.T) {
 		if tb.Lookup(Rune('R'), m) != CmdToggleRepeat || tb.Lookup(Rune('Z'), m) != CmdToggleShuffle {
 			t.Fatalf("R/Z must work in mode %d", m)
 		}
+		if tb.Lookup(Rune('V'), m) != CmdToggleFadeOut {
+			t.Fatalf("V must toggle fade out in mode %d", m)
+		}
 	}
 	f6, f7 := Special(tcell.KeyF6), Special(tcell.KeyF7)
 	if tb.Lookup(f6, ModeNormal) != CmdToggleRepeat || tb.Lookup(f7, ModeNormal) != CmdToggleShuffle {

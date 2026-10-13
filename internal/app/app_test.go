@@ -272,12 +272,12 @@ func TestRepeatShuffleAndHelpBarCategories(t *testing.T) {
 	a.fadeMixer = a.Mixer
 	a.Mixer.SetFade(a.Opts.FadeOut)
 	press(a, 'V')
-	if a.Opts.FadeOut || a.Mixer.Fade() {
-		t.Fatal("V should disable fade out")
-	}
-	press(a, 'V')
 	if !a.Opts.FadeOut || !a.Mixer.Fade() {
 		t.Fatal("V should enable fade out")
+	}
+	press(a, 'V')
+	if a.Opts.FadeOut || a.Mixer.Fade() {
+		t.Fatal("V should disable fade out")
 	}
 	press(a, tcell.KeyF1) // file mode: R/Z work everywhere
 	press(a, 'R', 'Z')
@@ -310,12 +310,16 @@ func TestFadeOutWithoutVisibleMixer(t *testing.T) {
 	opts := config.Default()
 	gains := audio.NewMixer()
 	a := New(Deps{Options: opts, Keys: keys.Default(), FadeMixer: gains, Backend: noBackend{}, View: &fakeView{}})
-	if a.Mixer != nil || !gains.Fade() {
-		t.Fatal("fade should start enabled without a visible mixer")
+	if a.Mixer != nil || gains.Fade() || opts.FadeOut {
+		t.Fatal("fade should start disabled without a visible mixer")
 	}
-	press(a, 'V')
-	if opts.FadeOut || gains.Fade() {
-		t.Fatal("fade should toggle without a visible mixer")
+	a.HandleKey(keys.FromEvent(tcell.NewEventKey(tcell.KeyRune, 'V', tcell.ModShift)))
+	if !opts.FadeOut || !gains.Fade() || a.Msg.Text != "Fade out enabled" {
+		t.Fatalf("toggle on: enabled=%v mixer=%v message=%q", opts.FadeOut, gains.Fade(), a.Msg.Text)
+	}
+	a.HandleKey(keys.FromEvent(tcell.NewEventKey(tcell.KeyRune, 'V', tcell.ModShift)))
+	if opts.FadeOut || gains.Fade() || a.Msg.Text != "Fade out disabled" {
+		t.Fatalf("toggle off: enabled=%v mixer=%v message=%q", opts.FadeOut, gains.Fade(), a.Msg.Text)
 	}
 }
 

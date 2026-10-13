@@ -106,16 +106,16 @@ func (m *Mixer) fadeOut(s beep.Streamer, total, duration int64, position *int64)
 		return s
 	}
 	start := max(int64(0), total-duration)
+	step := 1 / float64(total-start)
 	return beep.StreamerFunc(func(samples [][2]float64) (int, bool) {
 		n, ok := s.Stream(samples)
-		if m.Fade() {
-			for i := range samples[:n] {
-				frame := *position + int64(i)
-				if frame >= start {
-					gain := float64(max(int64(0), total-frame)) / float64(total-start)
-					samples[i][0] *= gain
-					samples[i][1] *= gain
-				}
+		if m.Fade() && *position+int64(n) > start {
+			first := int(max(int64(0), start-*position))
+			gain := float64(max(int64(0), total-(*position+int64(first)))) * step
+			for i := first; i < n; i++ {
+				samples[i][0] *= gain
+				samples[i][1] *= gain
+				gain = max(0, gain-step)
 			}
 		}
 		*position += int64(n)

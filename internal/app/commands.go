@@ -169,6 +169,11 @@ func (a *App) Exec(cmd keys.Command) {
 		if a.fadeMixer != nil {
 			a.fadeMixer.SetFade(a.Opts.FadeOut)
 		}
+		if a.Opts.FadeOut {
+			a.SetMessage("Fade out enabled")
+		} else {
+			a.SetMessage("Fade out disabled")
+		}
 	case keys.CmdToggleShuffle:
 		a.Cur.Shuffle = !a.Cur.Shuffle
 		p.ResetNextSong()

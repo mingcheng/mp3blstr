@@ -85,7 +85,6 @@ func Default() *Options {
 		FPL:                   5,
 		SortMode:              filemanager.SortAlpha,
 		PlayMode:              playback.PlayGroups,
-		FadeOut:               true,
 		FadeSeconds:           5,
 		SkipSeconds:           10,
 		PanSize:               5,

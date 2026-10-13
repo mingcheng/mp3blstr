@@ -120,7 +120,7 @@ func (o *Output) Open(path string, opts Options) (*Player, error) {
 		s = eightBit(s)
 	}
 	var fadePosition int64
-	s = o.mixer.fadeOut(s, totalFrames, int64(opts.FadeSeconds)*int64(OutputRate), &fadePosition)
+	s = o.mixer.fadeOut(s, totalFrames, fadeDurationFrames(totalFrames, opts.FadeSeconds), &fadePosition)
 
 	p := &Player{
 		pcm:      &pcmReader{src: src, s: o.mixer.Streamer(s), fadePosition: &fadePosition, sourceRate: int64(d.format.SampleRate)},
@@ -134,6 +134,14 @@ func (o *Output) Open(path string, opts Options) (*Player, error) {
 	p.out = o.ctx.NewPlayer(p.pcm)
 	go p.watch()
 	return p, nil
+}
+
+func fadeDurationFrames(total int64, seconds int) int64 {
+	duration := int64(seconds) * int64(OutputRate)
+	if total < 5*int64(OutputRate) || duration <= 0 || total < duration {
+		return 0
+	}
+	return duration
 }
 
 // watch closes Done once the stream ended and oto played all buffered data.
