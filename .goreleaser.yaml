@@ -35,6 +35,7 @@ archives:
       - LICENSE
       - README.md
       - config.sample.yaml
+      - share/applications/mp3blstr.desktop
 
 checksum:
   name_template: checksums.txt

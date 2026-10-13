@@ -4,9 +4,12 @@ package mediakeys
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
+	"errors"
 	"image"
 	"image/png"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -37,13 +40,30 @@ func TestMPRISCommands(t *testing.T) {
 		}
 	}
 	commands = nil
-	for _, err := range []*dbus.Error{p.SeekMPRIS(10), p.SetPosition(playerPath, 10), p.OpenUri("file:///song.mp3")} {
+	for _, err := range []*dbus.Error{p.SeekMPRIS(10), p.SetPosition(playerPath, 10)} {
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
 	if len(commands) != 0 {
 		t.Fatal("unsupported MPRIS operations dispatched commands")
+	}
+}
+
+func TestMPRISOpenURI(t *testing.T) {
+	var request *OpenRequest
+	p := player{post: func(command Command) {
+		request = command.Request
+		request.Result <- nil
+	}}
+	if err := p.OpenUri("file:///music/song%20%231.mp3"); err != nil {
+		t.Fatal(err)
+	}
+	if request == nil || len(request.Paths) != 1 || request.Enqueue || request.Paths[0] != "file:///music/song%20%231.mp3" {
+		t.Fatalf("open request = %+v", request)
+	}
+	if err := p.OpenUri("ftp://example.com/song.mp3"); err == nil {
+		t.Fatal("unsupported URI accepted")
 	}
 }
 
@@ -86,6 +106,28 @@ func TestMPRISModeCommands(t *testing.T) {
 	}
 }
 
+func TestMPRISVolumeCommands(t *testing.T) {
+	var commands []Command
+	properties := mprisProperties{post: func(command Command) { commands = append(commands, command) }}
+	for _, volume := range []float64{0, 0.42, 1, -1, 2} {
+		if err := properties.Set(playerIface, "Volume", dbus.MakeVariant(volume)); err != nil {
+			t.Fatal(err)
+		}
+		want := Command{Action: SetVolume, Volume: max(0, min(volume, 1))}
+		if commands[len(commands)-1] != want {
+			t.Fatalf("volume command = %v, want %v", commands[len(commands)-1], want)
+		}
+	}
+	for _, invalid := range []any{true, "0.5", math.NaN(), math.Inf(1)} {
+		if err := properties.Set(playerIface, "Volume", dbus.MakeVariant(invalid)); err == nil {
+			t.Fatalf("accepted volume %v", invalid)
+		}
+	}
+	if len(commands) != 5 {
+		t.Fatal("invalid volume dispatched")
+	}
+}
+
 func TestMPRIS(t *testing.T) {
 	if os.Getenv("DBUS_SESSION_BUS_ADDRESS") == "" {
 		t.Skip("requires a session bus")
@@ -108,6 +150,8 @@ func TestMPRIS(t *testing.T) {
 	obj := conn.Object(playerName(), playerPath)
 	for _, want := range []string{"Playing", "Playing", "Paused", "Stopped"} {
 		snapshot := Snapshot{Status: want, CanSeek: true, Position: 12, Duration: 120, Path: path, Title: "Linux metadata", Artist: "Artist", Album: "Album", TrackID: 1}
+		snapshot.Volume, snapshot.CanPlay = 0.75, true
+		snapshot.CanPause, snapshot.CanGoNext, snapshot.CanGoPrevious = want != "Stopped", want != "Stopped", want != "Stopped"
 		controls.Update(snapshot)
 		var all map[string]dbus.Variant
 		if err := obj.Call("org.freedesktop.DBus.Properties.GetAll", 0, playerIface).Store(&all); err != nil {
@@ -120,7 +164,10 @@ func TestMPRIS(t *testing.T) {
 		if want == "Stopped" && position != 0 || want == "Paused" && position != 12_000_000 || want == "Playing" && (position < 12_000_000 || position >= 14_000_000) {
 			t.Fatalf("%s position = %d", want, position)
 		}
-		for name, value := range map[string]any{"PlaybackStatus": want, "CanSeek": want != "Stopped"} {
+		for name, value := range map[string]any{
+			"PlaybackStatus": want, "CanSeek": want != "Stopped", "Volume": 0.75,
+			"CanPlay": true, "CanPause": snapshot.CanPause, "CanGoNext": snapshot.CanGoNext, "CanGoPrevious": snapshot.CanGoPrevious,
+		} {
 			var got dbus.Variant
 			if err := obj.Call("org.freedesktop.DBus.Properties.Get", 0, playerIface, name).Store(&got); err != nil {
 				t.Fatal(err)
@@ -155,7 +202,7 @@ func TestMPRIS(t *testing.T) {
 	signals := make(chan *dbus.Signal, 32)
 	conn.Signal(signals)
 	defer conn.RemoveSignal(signals)
-	snapshot := Snapshot{Status: "Stopped"}
+	snapshot := Snapshot{Status: "Stopped", Volume: 0.75, CanPlay: true}
 	for _, entry := range []struct {
 		name    string
 		value   any
@@ -166,6 +213,8 @@ func TestMPRIS(t *testing.T) {
 		{"LoopStatus", "None", Command{Action: SetLoopStatus, LoopStatus: "None"}},
 		{"Shuffle", true, Command{Action: SetShuffle, Enabled: true}},
 		{"Shuffle", false, Command{Action: SetShuffle, Enabled: false}},
+		{"Volume", 0.42, Command{Action: SetVolume, Volume: 0.42}},
+		{"Volume", 0.8, Command{Action: SetVolume, Volume: 0.8}},
 	} {
 		if err := obj.Call("org.freedesktop.DBus.Properties.Set", 0, playerIface, entry.name, dbus.MakeVariant(entry.value)).Err; err != nil {
 			t.Fatal(err)
@@ -178,10 +227,13 @@ func TestMPRIS(t *testing.T) {
 		case <-time.After(time.Second):
 			t.Fatalf("%s did not dispatch", entry.name)
 		}
-		if entry.name == "LoopStatus" {
+		switch entry.name {
+		case "LoopStatus":
 			snapshot.LoopStatus = entry.value.(string)
-		} else {
+		case "Shuffle":
 			snapshot.Shuffle = entry.value.(bool)
+		case "Volume":
+			snapshot.Volume = entry.value.(float64)
 		}
 		controls.Update(snapshot)
 		var value dbus.Variant
@@ -203,6 +255,56 @@ func TestMPRIS(t *testing.T) {
 	}
 	if err := obj.Call("org.freedesktop.DBus.Properties.Set", 0, playerIface, "LoopStatus", dbus.MakeVariant("Invalid")).Err; err == nil {
 		t.Fatal("D-Bus accepted invalid repeat mode")
+	}
+}
+
+func TestDesktopFileForwarding(t *testing.T) {
+	if os.Getenv("DBUS_SESSION_BUS_ADDRESS") == "" {
+		t.Skip("requires a session bus")
+	}
+	requests := make(chan *OpenRequest, 4)
+	controls, err := Start(func(command Command) {
+		requests <- command.Request
+		if command.Request.Paths[0] == "missing.mp3" {
+			command.Request.Result <- errors.New("rejected batch")
+		} else {
+			command.Request.Result <- nil
+		}
+	}, func(err error) { t.Error(err) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer controls.Close()
+	conn, err := dbus.ConnectSessionBus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	// Explicit candidates keep this test away from the user's real player.
+	for _, enqueue := range []bool{true, false} {
+		forwarded, err := forwardFiles(ctx, conn, []string{playerName()}, []string{"one.mp3", "two.flac"}, enqueue)
+		if err != nil || !forwarded {
+			t.Fatalf("forwarded=%v, error=%v", forwarded, err)
+		}
+		request := <-requests
+		if request.Enqueue != enqueue || !reflect.DeepEqual(request.Paths, []string{"one.mp3", "two.flac"}) {
+			t.Fatalf("forwarded request = %+v", request)
+		}
+	}
+	if forwarded, err := forwardFiles(ctx, conn, []string{playerName()}, []string{"missing.mp3"}, true); err == nil || forwarded {
+		t.Fatal("rejected request was treated as a new-player fallback")
+	}
+	<-requests
+	if forwarded, err := forwardFiles(ctx, conn, nil, []string{"one.mp3"}, true); err != nil || forwarded {
+		t.Fatalf("no-instance fallback = %v, %v", forwarded, err)
+	}
+	if err := conn.Object(playerName(), playerPath).CallWithContext(ctx, playerIface+".OpenUri", 0, "file:///music/one.mp3").Err; err != nil {
+		t.Fatal(err)
+	}
+	if request := <-requests; request.Enqueue || request.Paths[0] != "file:///music/one.mp3" {
+		t.Fatalf("MPRIS OpenUri request = %+v", request)
 	}
 }
 

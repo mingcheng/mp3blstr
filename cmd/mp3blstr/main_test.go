@@ -1,9 +1,11 @@
 package main
 
 import (
+	"math"
 	"testing"
 
 	"github.com/mingcheng/mp3blstr/internal/app"
+	"github.com/mingcheng/mp3blstr/internal/audio"
 	"github.com/mingcheng/mp3blstr/internal/config"
 	"github.com/mingcheng/mp3blstr/internal/media"
 	"github.com/mingcheng/mp3blstr/internal/mediakeys"
@@ -45,6 +47,26 @@ func (p *mediaPlayerFake) SongInfo() (string, media.SongInfo, bool) {
 	return "song.mp3", media.SongInfo{TotalSeconds: 60}, true
 }
 func (p *mediaPlayerFake) SeekTo(pos int) { p.seeks = append(p.seeks, pos) }
+
+func TestMediaVolume(t *testing.T) {
+	a := &app.App{Player: &playback.Controller{}, Opts: config.Default(), Mixer: audio.NewMixer()}
+	for _, entry := range []struct {
+		volume float64
+		want   int
+	}{
+		{0.425, 43}, {0, 0}, {-1, 0}, {2, 100},
+	} {
+		if err := handleAppMediaCommand(a, mediakeys.Command{Action: mediakeys.SetVolume, Volume: entry.volume}); err != nil {
+			t.Fatal(err)
+		}
+		if a.Volume() != entry.want {
+			t.Fatalf("volume = %d, want %d", a.Volume(), entry.want)
+		}
+	}
+	if err := handleAppMediaCommand(a, mediakeys.Command{Action: mediakeys.SetVolume, Volume: math.NaN()}); err == nil || a.Volume() != 100 {
+		t.Fatal("invalid desktop volume changed output")
+	}
+}
 
 func TestMediaRepeatModes(t *testing.T) {
 	a := &app.App{Player: &playback.Controller{}, Opts: config.Default()}

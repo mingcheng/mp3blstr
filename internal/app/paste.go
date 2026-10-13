@@ -2,15 +2,11 @@ package app
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/kballard/go-shellquote"
-
-	"github.com/mingcheng/mp3blstr/internal/media"
 )
 
 // HandlePaste treats a paste as text, never as a sequence of commands.
@@ -46,35 +42,25 @@ func (a *App) addPaths(text string) {
 		a.Warning(fmt.Sprintf("Invalid audio paths: %v", err))
 		return
 	}
-	if len(paths) == 0 {
-		a.Warning("No audio paths given.")
-		return
+	if err := a.OpenAudioPaths(paths, true); err != nil {
+		a.Warning(err.Error())
 	}
-	for i, path := range paths {
-		path = media.ExpandPath(path)
-		if !a.Matcher.IsAudio(path) {
-			a.Warning(fmt.Sprintf("Not a supported audio file: %s", path))
-			return
-		}
-		if !media.IsHTTPStream(path) {
-			if path, err = filepath.Abs(path); err != nil {
-				a.Warning(fmt.Sprintf("Invalid audio path: %v", err))
-				return
-			}
-			info, err := os.Stat(path)
-			if err != nil {
-				a.Warning(fmt.Sprintf("Cannot add audio file: %v", err))
-				return
-			}
-			if !info.Mode().IsRegular() {
-				a.Warning(fmt.Sprintf("Not a regular audio file: %s", path))
-				return
-			}
-		}
-		paths[i] = path
+}
+
+// OpenAudioPaths is shared by text input and desktop file-open requests.
+func (a *App) OpenAudioPaths(inputs []string, enqueue bool) error {
+	paths, err := a.Matcher.AudioPaths(inputs)
+	if err != nil {
+		return err
 	}
 	a.AddFiles(paths)
 	a.Player.QuitAfterPlaylist = false
 	a.Player.ResetNextSong()
+	if !enqueue {
+		a.Player.Stop()
+		a.Player.Resume(paths[0], 0)
+		a.Player.Play()
+	}
 	a.SetMessage(fmt.Sprintf("Added %d audio files to the current group.", len(paths)))
+	return nil
 }

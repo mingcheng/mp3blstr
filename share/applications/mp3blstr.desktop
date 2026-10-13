@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Name=mp3blstr
+GenericName=Audio Player
+Comment=Play audio in a terminal with desktop media controls
+Exec=mp3blstr --reuse-instance --dont-quit %U
+TryExec=mp3blstr
+Icon=multimedia-player
+Terminal=true
+Categories=AudioVideo;Audio;Player;
+MimeType=audio/mpeg;audio/flac;audio/x-flac;audio/ogg;audio/x-vorbis+ogg;audio/wav;audio/x-wav;
+Actions=Enqueue;
+
+[Desktop Action Enqueue]
+Name=Add to Playback Queue
+Exec=mp3blstr --reuse-instance --enqueue --dont-quit %U

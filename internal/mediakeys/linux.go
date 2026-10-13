@@ -5,6 +5,7 @@ package mediakeys
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -23,6 +24,7 @@ const (
 	playerPath  = dbus.ObjectPath("/org/mpris/MediaPlayer2")
 	rootIface   = "org.mpris.MediaPlayer2"
 	playerIface = "org.mpris.MediaPlayer2.Player"
+	filesIface  = "org.mp3blstr.Player"
 )
 
 func playerName() string {
@@ -42,13 +44,38 @@ type player struct {
 	state *mpris
 }
 
-func (p player) PlayPause() *dbus.Error   { p.post(Command{Action: PlayPause}); return nil }
-func (p player) Play() *dbus.Error        { p.post(Command{Action: Play}); return nil }
-func (p player) Pause() *dbus.Error       { p.post(Command{Action: Pause}); return nil }
-func (p player) Next() *dbus.Error        { p.post(Command{Action: Next}); return nil }
-func (p player) Previous() *dbus.Error    { p.post(Command{Action: Previous}); return nil }
-func (p player) Stop() *dbus.Error        { p.post(Command{Action: Stop}); return nil }
-func (player) OpenUri(string) *dbus.Error { return nil }
+func (p player) PlayPause() *dbus.Error { p.post(Command{Action: PlayPause}); return nil }
+func (p player) Play() *dbus.Error      { p.post(Command{Action: Play}); return nil }
+func (p player) Pause() *dbus.Error     { p.post(Command{Action: Pause}); return nil }
+func (p player) Next() *dbus.Error      { p.post(Command{Action: Next}); return nil }
+func (p player) Previous() *dbus.Error  { p.post(Command{Action: Previous}); return nil }
+func (p player) Stop() *dbus.Error      { p.post(Command{Action: Stop}); return nil }
+func (p player) OpenUri(uri string) *dbus.Error {
+	parsed, err := url.Parse(uri)
+	if err != nil || (parsed.Scheme != "file" && parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return prop.ErrInvalidArg
+	}
+	return openFiles(p.post, []string{uri}, false)
+}
+
+type fileOpener struct{ post func(Command) }
+
+func (f fileOpener) Open(paths []string, enqueue bool) *dbus.Error {
+	return openFiles(f.post, paths, enqueue)
+}
+
+func openFiles(post func(Command), paths []string, enqueue bool) *dbus.Error {
+	if len(paths) == 0 {
+		return prop.ErrInvalidArg
+	}
+	request := &OpenRequest{Paths: paths, Enqueue: enqueue, Result: make(chan error, 1)}
+	// No property lock may be held while waiting for the UI to update MPRIS.
+	post(Command{Action: OpenURI, Request: request})
+	if err := <-request.Result; err != nil {
+		return dbus.MakeFailedError(err)
+	}
+	return nil
+}
 
 func (p player) SeekMPRIS(offset int64) *dbus.Error {
 	if p.state == nil {
@@ -116,6 +143,13 @@ func (p mprisProperties) Set(iface, name string, value dbus.Variant) *dbus.Error
 				return prop.ErrInvalidArg
 			}
 			p.post(Command{Action: SetShuffle, Enabled: enabled})
+			return nil
+		case "Volume":
+			volume, ok := value.Value().(float64)
+			if !ok || math.IsNaN(volume) || math.IsInf(volume, 0) {
+				return prop.ErrInvalidArg
+			}
+			p.post(Command{Action: SetVolume, Volume: max(0, min(volume, 1))})
 			return nil
 		}
 	}
@@ -208,14 +242,18 @@ func export(conn *dbus.Conn, post func(Command)) (*mpris, error) {
 	if err := conn.ExportWithMap(p, playerMethods, playerPath, playerIface); err != nil {
 		return nil, err
 	}
+	if err := conn.Export(fileOpener{post: post}, playerPath, filesIface); err != nil {
+		return nil, err
+	}
 	props, err := prop.Export(conn, playerPath, prop.Map{
 		rootIface: {
 			"Identity":            constant("mp3blstr"),
+			"DesktopEntry":        constant("mp3blstr"),
 			"CanQuit":             constant(false),
 			"CanRaise":            constant(false),
 			"HasTrackList":        constant(false),
-			"SupportedUriSchemes": constant([]string{}),
-			"SupportedMimeTypes":  constant([]string{}),
+			"SupportedUriSchemes": constant([]string{"file", "http", "https"}),
+			"SupportedMimeTypes":  constant([]string{"audio/mpeg", "audio/flac", "audio/x-flac", "audio/ogg", "audio/x-vorbis+ogg", "audio/wav", "audio/x-wav"}),
 		},
 		playerIface: {
 			"PlaybackStatus": {Value: "Stopped", Emit: prop.EmitTrue},
@@ -223,14 +261,14 @@ func export(conn *dbus.Conn, post func(Command)) (*mpris, error) {
 			"Rate":           constant(1.0),
 			"Shuffle":        {Value: false, Writable: true, Emit: prop.EmitTrue},
 			"Metadata":       {Value: map[string]dbus.Variant{}, Emit: prop.EmitTrue},
-			"Volume":         constant(1.0),
+			"Volume":         {Value: 1.0, Writable: true, Emit: prop.EmitTrue},
 			"Position":       {Value: int64(0), Emit: prop.EmitFalse},
 			"MinimumRate":    constant(1.0),
 			"MaximumRate":    constant(1.0),
-			"CanGoNext":      constant(true),
-			"CanGoPrevious":  constant(true),
-			"CanPlay":        constant(true),
-			"CanPause":       constant(true),
+			"CanGoNext":      {Value: false, Emit: prop.EmitTrue},
+			"CanGoPrevious":  {Value: false, Emit: prop.EmitTrue},
+			"CanPlay":        {Value: false, Emit: prop.EmitTrue},
+			"CanPause":       {Value: false, Emit: prop.EmitTrue},
 			"CanSeek":        {Value: false, Emit: prop.EmitTrue},
 			"CanControl":     constant(true),
 		},
@@ -253,6 +291,7 @@ func export(conn *dbus.Conn, post func(Command)) (*mpris, error) {
 		Interfaces: []introspect.Interface{
 			introspect.IntrospectData,
 			prop.IntrospectData,
+			{Name: filesIface, Methods: introspect.Methods(fileOpener{})},
 			{Name: rootIface, Methods: introspect.Methods(root{}), Properties: props.Introspection(rootIface)},
 			{Name: playerIface, Methods: methods, Properties: props.Introspection(playerIface), Signals: []introspect.Signal{{Name: "Seeked", Args: []introspect.Arg{{Name: "Position", Type: "x"}}}}},
 		},
@@ -310,6 +349,11 @@ func (m *mpris) Update(s Snapshot) {
 		"CanSeek":        s.CanSeek && s.Status != "Stopped" && s.Duration > 0,
 		"LoopStatus":     loopStatus(s),
 		"Shuffle":        s.Shuffle,
+		"Volume":         s.Volume,
+		"CanPlay":        s.CanPlay,
+		"CanPause":       s.CanPause,
+		"CanGoNext":      s.CanGoNext,
+		"CanGoPrevious":  s.CanGoPrevious,
 	} {
 		if !reflect.DeepEqual(m.props.GetMust(playerIface, name), value) {
 			m.props.SetMust(playerIface, name, value)

@@ -230,13 +230,9 @@ func (a *App) Exec(cmd keys.Command) {
 			a.Mixer.Next()
 		}
 	case keys.CmdMixerVolDown:
-		if a.Mixer != nil {
-			a.Mixer.Change(-2)
-		}
+		a.MixerVolume(-2)
 	case keys.CmdMixerVolUp:
-		if a.Mixer != nil {
-			a.Mixer.Change(2)
-		}
+		a.MixerVolume(2)
 	default:
 		a.execFileCommand(cmd)
 	}
@@ -254,11 +250,11 @@ func (a *App) mixerKey(k keys.Key) {
 	case 'j':
 		a.Mixer.Next()
 	case 'l':
-		a.Mixer.Change(2)
+		a.MixerVolume(2)
 	case 'h':
-		a.Mixer.Change(-2)
+		a.MixerVolume(-2)
 	case '0':
-		a.Mixer.Set(0)
+		a.MixerSet(0)
 	}
 }
 

@@ -97,6 +97,34 @@ func press(a *App, ks ...any) {
 	}
 }
 
+func TestDesktopVolume(t *testing.T) {
+	a, _ := newTestApp(t)
+	mixer := audio.NewMixer()
+	a.Mixer, a.fadeMixer = mixer, mixer
+	changes := 0
+	a.OnPlaybackChange = func() { changes++ }
+	a.SetVolume(42)
+	if a.Volume() != 42 || mixer.Device(audio.DevVolume).Value != 42 {
+		t.Fatal("desktop volume did not reach output")
+	}
+	a.MixerSet(70)
+	a.MixerVolume(-2)
+	press(a, 'l')
+	if a.Volume() != 70 || changes != 4 {
+		t.Fatalf("terminal volume=%d notifications=%d", a.Volume(), changes)
+	}
+	mixer.Next()
+	a.SetVolume(20)
+	if mixer.Device(audio.DevBalance).Value != 50 || a.Volume() != 20 {
+		t.Fatal("desktop volume changed selected balance control")
+	}
+	a.Mixer = nil
+	a.SetVolume(35)
+	if a.Volume() != 35 {
+		t.Fatal("hidden mixer did not receive desktop volume")
+	}
+}
+
 func TestSetPlaybackModes(t *testing.T) {
 	a, _ := newTestApp(t)
 	changes := 0

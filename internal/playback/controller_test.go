@@ -107,6 +107,34 @@ func current(c *Controller) string {
 	return c.track.(*fakeTrack).path
 }
 
+func TestDesktopCapabilities(t *testing.T) {
+	root := playlist.NewGroup("[Default]")
+	h := newHarness(root)
+	defer h.c.Shutdown()
+	if play, pause, next, previous := h.c.Capabilities(); play || pause || next || previous {
+		t.Fatal("empty player advertised transport capabilities")
+	}
+	root.AddSong("a")
+	root.AddSong("b")
+	if play, pause, next, previous := h.c.Capabilities(); !play || pause || next || previous {
+		t.Fatal("idle playlist capabilities incorrect")
+	}
+	h.c.Play()
+	h.settle(t)
+	if play, pause, next, previous := h.c.Capabilities(); !play || !pause || !next || !previous {
+		t.Fatal("playing playlist capabilities incorrect")
+	}
+	h.c.Next()
+	h.settle(t)
+	if _, _, next, _ := h.c.Capabilities(); next {
+		t.Fatal("last song advertised a nonexistent next track")
+	}
+	h.c.Repeat = true
+	if _, _, next, _ := h.c.Capabilities(); !next {
+		t.Fatal("repeating playlist did not advertise next track")
+	}
+}
+
 func TestGroupsInOrderIncludingSubgroups(t *testing.T) {
 	root := playlist.NewGroup("[Default]")
 	sub := playlist.NewGroup("[sub]")

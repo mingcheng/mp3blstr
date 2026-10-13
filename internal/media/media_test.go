@@ -2,13 +2,44 @@ package media
 
 import (
 	"bytes"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"golang.org/x/text/encoding/simplifiedchinese"
 )
+
+func TestAudioPaths(t *testing.T) {
+	matcher, err := NewMatcher(nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "\u97f3\u4e50 #1.mp3")
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	uri := (&url.URL{Scheme: "file", Path: path}).String()
+	for _, input := range []string{path, uri, strings.Replace(uri, "file:///", "file://localhost/", 1)} {
+		paths, err := matcher.AudioPaths([]string{input, "https://example.com/live"})
+		if err != nil || len(paths) != 2 || paths[0] != path {
+			t.Fatalf("AudioPaths(%q) = %v, %v", input, paths, err)
+		}
+	}
+	for _, inputs := range [][]string{
+		nil, {"file://remote/music/song.mp3"}, {"file:relative.mp3"},
+		{uri + "?query=1"}, {uri + "#fragment"}, {"file:///bad%ZZ.mp3"},
+		{"https://"}, {dir}, {filepath.Join(dir, "unsupported.txt")},
+		{path, filepath.Join(dir, "missing.mp3")},
+	} {
+		if paths, err := matcher.AudioPaths(inputs); err == nil || paths != nil {
+			t.Fatalf("invalid batch = %v, %v", paths, err)
+		}
+	}
+}
 
 func TestGuessTagText(t *testing.T) {
 	gb, err := simplifiedchinese.GBK.NewEncoder().Bytes([]byte("周杰伦 - 晴天"))

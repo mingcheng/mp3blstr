@@ -18,6 +18,8 @@ const (
 	Seek
 	SetLoopStatus
 	SetShuffle
+	SetVolume
+	OpenURI
 )
 
 // Command carries explicit seek and playback-mode targets. TrackID prevents
@@ -28,6 +30,15 @@ type Command struct {
 	TrackID    int
 	LoopStatus string
 	Enabled    bool
+	Volume     float64
+	Request    *OpenRequest
+}
+
+// OpenRequest returns validation errors to desktop callers, not just the TUI.
+type OpenRequest struct {
+	Paths   []string
+	Enqueue bool
+	Result  chan error
 }
 
 // SeekSeconds validates a native target and converts it to the player's
@@ -58,6 +69,9 @@ type Snapshot struct {
 	CanSeek                      bool
 	LoopStatus                   string
 	Shuffle                      bool
+	Volume                       float64
+	CanPlay, CanPause            bool
+	CanGoNext, CanGoPrevious     bool
 }
 
 func (s Snapshot) samePlayback(other Snapshot) bool {

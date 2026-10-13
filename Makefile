@@ -7,16 +7,22 @@ LDFLAGS := -s -w -X main.version=$(VERSION) -X main.buildDate=$(BUILD_DATE)
 GCFLAGS := github.com/ebitengine/purego/internal/fakecgo=-std
 GOBUILD := go build -trimpath -gcflags="$(GCFLAGS)" -ldflags "$(LDFLAGS)"
 TARGETS := darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64 windows/arm64 freebsd/amd64
+PREFIX ?= /usr/local
+DESTDIR ?=
 
 # Pure Go everywhere: audio output goes through oto without cgo.
 export CGO_ENABLED := 0
 
-.PHONY: all build test race vet fmt clean cross
+.PHONY: all build test race vet fmt clean cross install
 
 all: vet test build
 
 build:
 	$(GOBUILD) -o bin/$(BINARY) ./cmd/mp3blstr
+
+install: build
+	install -Dm755 bin/$(BINARY) $(DESTDIR)$(PREFIX)/bin/$(BINARY)
+	install -Dm644 share/applications/mp3blstr.desktop $(DESTDIR)$(PREFIX)/share/applications/mp3blstr.desktop
 
 test:
 	go test ./...

@@ -89,10 +89,17 @@ System media controls
   and shuffle for the current group, synchronized with the
   terminal controls.
 
-  macOS pauses on sleep and audio output changes by default.
-  Configure playback.pause_on_sleep and
-  playback.pause_on_output_change independently of media keys.
+  Linux also provides desktop volume control and file opening.
+  Install its launcher with: make install PREFIX=$HOME/.local
+  --reuse-instance sends files to an existing player;
+  --enqueue adds them without interrupting playback.
+  Normal terminal launches remain independent instances.
+
+  Linux (logind) and macOS pause on sleep by default.
+  Configure playback.pause_on_sleep independently of media keys.
   Press Play to resume after waking.
+  macOS also pauses on audio output changes; configure with
+  playback.pause_on_output_change.
 
   Use --debug to diagnose unavailable controls or cover errors.
 

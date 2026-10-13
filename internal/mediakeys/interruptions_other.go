@@ -1,4 +1,4 @@
-//go:build !darwin
+//go:build !darwin && !linux
 
 package mediakeys
 
@@ -10,5 +10,5 @@ import (
 const SupportsInterruptions = false
 
 func WatchInterruptions(bool, bool, func(Interruption)) (io.Closer, error) {
-	return nil, errors.New("system interruption monitoring is only supported on macOS")
+	return nil, errors.New("system interruption monitoring is unsupported on this platform")
 }

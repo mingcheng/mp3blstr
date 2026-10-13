@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -95,6 +96,21 @@ func run(args []string) int {
 	if err != nil {
 		return fail(err)
 	}
+	if len(cli.Files) > 0 && (cli.ReuseInstance || cli.Enqueue) {
+		cli.Files, err = matcher.AudioPaths(cli.Files)
+		if err != nil {
+			return usage(err)
+		}
+		if cli.ReuseInstance {
+			forwarded, err := mediakeys.ForwardFiles(cli.Files, cli.Enqueue)
+			if err != nil {
+				return fail(err)
+			}
+			if forwarded {
+				return exitOK
+			}
+		}
+	}
 	for _, f := range cli.Files {
 		if !matcher.IsAudio(f) {
 			return usage(fmt.Errorf("%s is not a valid audio file", f))
@@ -133,7 +149,11 @@ func run(args []string) int {
 	if opts.MediaKeys {
 		controls, err := mediakeys.Start(func(command mediakeys.Command) {
 			u.Post(func() {
-				if err := handleAppMediaCommand(a, command); err != nil {
+				err := handleAppMediaCommand(a, command)
+				if command.Request != nil {
+					command.Request.Result <- err
+				}
+				if err != nil {
 					logger.Warn("media command rejected", "err", err)
 					a.Warning(err.Error())
 				}
@@ -147,6 +167,7 @@ func run(args []string) int {
 			a.OnPlaybackChange = func() {
 				snapshot := playbackSnapshot(a.Player)
 				snapshot.Shuffle = a.Shuffle()
+				snapshot.Volume = float64(a.Volume()) / 100
 				controls.Update(snapshot)
 			}
 			a.OnPlaybackChange()
@@ -223,6 +244,16 @@ func handleAppMediaCommand(a *app.App, command mediakeys.Command) error {
 		}
 	case mediakeys.SetShuffle:
 		a.SetShuffle(command.Enabled)
+	case mediakeys.SetVolume:
+		if math.IsNaN(command.Volume) || math.IsInf(command.Volume, 0) {
+			return errors.New("invalid volume")
+		}
+		a.SetVolume(int(math.Round(max(0, min(command.Volume, 1)) * 100)))
+	case mediakeys.OpenURI:
+		if command.Request == nil {
+			return errors.New("missing file-open request")
+		}
+		return a.OpenAudioPaths(command.Request.Paths, command.Request.Enqueue)
 	default:
 		return handleMediaCommand(a.Player, command)
 	}
@@ -281,6 +312,7 @@ func playbackSnapshot(p *playback.Controller) mediakeys.Snapshot {
 			s.Status = "Paused"
 		}
 	}
+	s.CanPlay, s.CanPause, s.CanGoNext, s.CanGoPrevious = p.Capabilities()
 	return s
 }
 
@@ -377,6 +409,12 @@ func absPath(p string) string {
 func start(a *app.App, cli *config.CLI, persist bool) {
 	switch {
 	case len(cli.Files) > 0:
+		if cli.Enqueue {
+			if err := a.OpenAudioPaths(cli.Files, true); err != nil {
+				a.Warning(err.Error())
+			}
+			return
+		}
 		a.AddFiles(cli.Files)
 		a.Player.QuitAfterPlaylist = !cli.DontQuit
 		a.Player.Play()

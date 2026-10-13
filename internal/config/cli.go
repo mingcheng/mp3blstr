@@ -32,10 +32,12 @@ type CLI struct {
 	Threads     int
 	Version     bool
 
-	Theme     string
-	NerdFont  bool
-	NoMouse   bool
-	ListWidth string
+	Theme         string
+	NerdFont      bool
+	NoMouse       bool
+	ReuseInstance bool
+	Enqueue       bool
+	ListWidth     string
 
 	Files []string // songs to play
 
@@ -72,12 +74,20 @@ func ParseArgs(args []string) (*CLI, error) {
 	fs.StringVar(&c.Theme, "theme", "", "")
 	fs.BoolVar(&c.NerdFont, "nerd-font", false, "")
 	fs.BoolVar(&c.NoMouse, "no-mouse", false, "")
+	fs.BoolVar(&c.ReuseInstance, "reuse-instance", false, "")
+	fs.BoolVar(&c.Enqueue, "enqueue", false, "")
 	fs.StringVar(&c.ListWidth, "list-width", "", "")
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
 	fs.Visit(func(f *pflag.Flag) { c.set[f.Name] = true })
 	c.Files = fs.Args()
+	if c.Enqueue && len(c.Files) == 0 {
+		return nil, fmt.Errorf("--enqueue requires audio files")
+	}
+	if (c.ReuseInstance || c.Enqueue) && c.Chroot != "" {
+		return nil, fmt.Errorf("desktop file-open options cannot be combined with --chroot")
+	}
 	if (c.List != "" || c.AutoList != "") && len(c.Files) > 0 {
 		return nil, fmt.Errorf("files can't be combined with --list/--autolist")
 	}
@@ -176,6 +186,8 @@ Options:
 	--version,v: Display version number.
 
 Extensions:
+	--reuse-instance: On Linux, send files to an existing player if available.
+	--enqueue: Add files without starting playback (use with --reuse-instance).
 	--theme={classic,modern}: Colour theme (default: classic).
 	--nerd-font: Use Nerd Font icons in the interface.
 	--no-mouse: Disable mouse support.

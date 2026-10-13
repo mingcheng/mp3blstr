@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/mingcheng/mp3blstr/internal/media"
+	"go.yaml.in/yaml/v3"
 )
 
 // The sample configuration must parse as shipped and with all settings
@@ -48,6 +49,47 @@ func TestSampleConfig(t *testing.T) {
 	}
 	if len(o.Colours) != 18 || len(o.Keys) != 25 {
 		t.Errorf("colours %d, keys %d", len(o.Colours), len(o.Keys))
+	}
+}
+
+func TestDesktopPackaging(t *testing.T) {
+	data, err := os.ReadFile("../../.goreleaser.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var release struct {
+		Archives []struct{ Files []string } `yaml:"archives"`
+	}
+	if err := yaml.Unmarshal(data, &release); err != nil {
+		t.Fatal(err)
+	}
+	packaged := false
+	for _, archive := range release.Archives {
+		for _, path := range archive.Files {
+			packaged = packaged || path == "share/applications/mp3blstr.desktop"
+		}
+	}
+	if !packaged {
+		t.Fatal("desktop entry missing from release archives")
+	}
+	data, err = os.ReadFile("../../share/applications/mp3blstr.desktop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range []string{"Type=Application", "Terminal=true", "Icon=multimedia-player", "Exec=mp3blstr --reuse-instance --dont-quit %U", "--enqueue", "audio/mpeg;"} {
+		if !strings.Contains(string(data), entry) {
+			t.Fatalf("desktop entry missing %q", entry)
+		}
+	}
+	for _, args := range [][]string{{"--reuse-instance", "--enqueue", "song.mp3"}, {"--reuse-instance"}} {
+		if _, err := ParseArgs(args); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, args := range [][]string{{"--enqueue"}, {"--reuse-instance", "--chroot", "/"}} {
+		if _, err := ParseArgs(args); err == nil {
+			t.Fatalf("accepted invalid flags %v", args)
+		}
 	}
 }
 

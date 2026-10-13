@@ -236,6 +236,40 @@ func (c *Controller) CanSeek() bool {
 // NextSongName returns the name of the song that will play next.
 func (c *Controller) NextSongName() string { return c.nextName }
 
+// Capabilities inspects the queue without consuming tracks or random choices.
+func (c *Controller) Capabilities() (play, pause, next, previous bool) {
+	group, recursive := c.root, true
+	if c.Mode != PlaySongs && c.listener != nil {
+		group = c.listener.CurrentGroup()
+		recursive = c.Mode == PlayGroups
+	}
+	play = !c.opening && (c.track != nil || c.resumeSong != "" || hasSongs(group, recursive))
+	pause = c.playing
+	previous = c.playing && !c.history.AtStart()
+	if !c.playing || c.opening || c.single == singleOnly {
+		return
+	}
+	if c.Mode == PlayGroups && c.groupWin != nil {
+		group = c.groupWin
+	} else if c.Mode == PlayGroup && c.playingGrp != nil {
+		group = c.playingGrp
+	}
+	next = !c.history.AtEnd() || (group != nil && (group.UnplayedSongs(recursive) > 0 || (c.Repeat && hasSongs(group, recursive))))
+	return
+}
+
+func hasSongs(group *playlist.Group, recursive bool) bool {
+	if group == nil {
+		return false
+	}
+	for _, item := range group.Items {
+		if item.Kind == playlist.KindSong || (recursive && item.Kind == playlist.KindGroup && hasSongs(item.Group, true)) {
+			return true
+		}
+	}
+	return false
+}
+
 // --- user actions ----------------------------------------------------------
 
 // Play starts the playlist, or toggles pause when a song is loaded.

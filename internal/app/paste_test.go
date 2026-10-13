@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -75,6 +76,22 @@ func TestAddPathsQuotedAndAtomic(t *testing.T) {
 	if a.Cur.Len() != before+2 {
 		t.Fatal("multiple paths were not added")
 	}
+}
+
+func TestDesktopAudioPaths(t *testing.T) {
+	a, dir := newTestApp(t)
+	path := filepath.Join(dir, "a.mp3")
+	uri := (&url.URL{Scheme: "file", Path: path}).String()
+	if err := a.OpenAudioPaths([]string{uri, filepath.Join(dir, "missing.mp3")}, true); err == nil || a.Cur.Len() != 0 {
+		t.Fatal("invalid desktop batch partially changed playlist")
+	}
+	if err := a.OpenAudioPaths([]string{uri}, true); err != nil || a.Cur.Len() != 1 || a.Player.Playing() {
+		t.Fatalf("enqueue started playback or failed: %v", err)
+	}
+	if err := a.OpenAudioPaths([]string{uri}, false); err != nil || !a.Player.Playing() || a.Player.QuitAfterPlaylist {
+		t.Fatalf("desktop open did not start persistent playback: %v", err)
+	}
+	a.Player.Shutdown()
 }
 
 func TestTrashConfirmationAndFailure(t *testing.T) {

@@ -3,6 +3,8 @@
 package media
 
 import (
+	"fmt"
+	"net/url"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -73,6 +75,48 @@ func matchAny(res []*regexp.Regexp, s string) bool {
 func IsHTTPStream(p string) bool {
 	l := strings.ToLower(p)
 	return strings.HasPrefix(l, "http://") || strings.HasPrefix(l, "https://")
+}
+
+// AudioPaths validates a whole batch before callers change the playlist.
+func (m *Matcher) AudioPaths(inputs []string) ([]string, error) {
+	if len(inputs) == 0 {
+		return nil, fmt.Errorf("no audio paths given")
+	}
+	paths := make([]string, len(inputs))
+	for index, input := range inputs {
+		path := ExpandPath(input)
+		if strings.HasPrefix(strings.ToLower(path), "file:") {
+			uri, err := url.Parse(path)
+			if err != nil || (uri.Host != "" && uri.Host != "localhost") || uri.User != nil || uri.RawQuery != "" || uri.Fragment != "" || !filepath.IsAbs(uri.Path) {
+				return nil, fmt.Errorf("invalid local file URI: %s", input)
+			}
+			path = uri.Path
+		}
+		if !m.IsAudio(path) {
+			return nil, fmt.Errorf("not a supported audio file: %s", input)
+		}
+		if IsHTTPStream(path) {
+			uri, err := url.Parse(path)
+			if err != nil || uri.Host == "" {
+				return nil, fmt.Errorf("invalid stream URI: %s", input)
+			}
+		} else {
+			var err error
+			path, err = filepath.Abs(path)
+			if err != nil {
+				return nil, err
+			}
+			info, err := os.Stat(path)
+			if err != nil {
+				return nil, err
+			}
+			if !info.Mode().IsRegular() {
+				return nil, fmt.Errorf("not a regular audio file: %s", input)
+			}
+		}
+		paths[index] = path
+	}
+	return paths, nil
 }
 
 // ChopPath returns the part of p after the last path separator. URLs are

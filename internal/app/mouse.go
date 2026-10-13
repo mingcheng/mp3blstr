@@ -1,6 +1,9 @@
 package app
 
-import "github.com/mingcheng/mp3blstr/internal/keys"
+import (
+	"github.com/mingcheng/mp3blstr/internal/audio"
+	"github.com/mingcheng/mp3blstr/internal/keys"
+)
 
 // The functions in this file are used by the mouse handlers of the UI.
 
@@ -92,6 +95,7 @@ func (a *App) SeekTo(secs int) {
 func (a *App) MixerSet(v int) {
 	if a.Mixer != nil {
 		a.Mixer.Set(v)
+		a.playerChanged()
 	}
 }
 
@@ -99,5 +103,28 @@ func (a *App) MixerSet(v int) {
 func (a *App) MixerVolume(delta int) {
 	if a.Mixer != nil {
 		a.Mixer.Change(delta)
+		a.playerChanged()
+	}
+}
+
+// Volume uses the output mixer even when its terminal controls are hidden.
+func (a *App) Volume() int {
+	if a.fadeMixer != nil {
+		return a.fadeMixer.Device(audio.DevVolume).Value
+	}
+	if a.Mixer != nil {
+		return a.Mixer.Device(audio.DevVolume).Value
+	}
+	return 100
+}
+
+func (a *App) SetVolume(volume int) {
+	mixer := a.fadeMixer
+	if mixer == nil {
+		mixer = a.Mixer
+	}
+	if mixer != nil {
+		mixer.SetDevice(audio.DevVolume, volume)
+		a.playerChanged()
 	}
 }
