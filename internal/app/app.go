@@ -99,6 +99,7 @@ const helpBarRows = 4
 
 // App is the application state.
 type App struct {
+	Version          string
 	Opts             *config.Options
 	Keys             *keys.Table
 	Matcher          *media.Matcher
@@ -155,6 +156,7 @@ const defaultGroupTitle = "[Default]"
 
 // Deps are the collaborators and settings an App is created with.
 type Deps struct {
+	Version    string // formatted build version for the UI and About text
 	Options    *config.Options
 	Keys       *keys.Table
 	Matcher    *media.Matcher
@@ -176,6 +178,7 @@ func New(d Deps) *App {
 		log = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 	a := &App{
+		Version:    d.Version,
 		Opts:       d.Options,
 		Keys:       d.Keys,
 		Matcher:    d.Matcher,
@@ -193,7 +196,7 @@ func New(d Deps) *App {
 		view:       d.View,
 		log:        log,
 		trash:      d.Trash,
-		help:       append(strings.Split(strings.TrimRight(helpText, "\n"), "\n"), keyReference(d.Keys)...),
+		help:       append(strings.Split(strings.TrimRight(strings.ReplaceAll(helpText, "{{VERSION}}", d.Version), "\n"), "\n"), keyReference(d.Keys)...),
 	}
 	if a.trash == nil {
 		a.trash = filemanager.Trash

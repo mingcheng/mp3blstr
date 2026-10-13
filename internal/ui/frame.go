@@ -2,6 +2,7 @@ package ui
 
 import (
 	"github.com/rivo/tview"
+	"github.com/rivo/uniseg"
 
 	"github.com/mingcheng/mp3blstr/internal/keys"
 )
@@ -30,6 +31,11 @@ func (s *Screen) drawFrame(c canvas, l layout) {
 	c.put(x, 10, g.Cross, st, 1)
 	c.put(x, h-4, g.Cross, st, 1)
 	c.put(x, h-1, g.BTee, st, 1)
+
+	if s.app.Version != "" {
+		label := " " + crunch(s.app.Version, w-10) + " "
+		c.put(w-6-uniseg.StringWidth(label), 0, label, s.th.Default, w-7)
+	}
 
 	// "( - )" and "( + )" scroll the help bar.
 	for _, b := range []struct {

@@ -1,28 +1,30 @@
-mp3blstr is a modern re-implementation of the classic mp3blaster
 
-About
-=====
+About mp3blstr {{VERSION}}
+==========================
 
-  mp3blaster is a classic console audio player written by
-  Bram Avontuur:
-      https://github.com/stragulus/mp3blaster
-
-  mp3blstr is a modern re-implementation written in pure
-  Golang by mingcheng <mingcheng@outlook.com>:
+  mp3blstr is a modern reimplementation of the classic
+  mp3blaster, written in pure Go by
+  mingcheng <mingcheng@outlook.com>:
       https://github.com/mingcheng/mp3blstr
 
-  More than two decades ago, as a student, I listened to
-  music with mp3blaster every day. Sadly, the original is
-  no longer maintained and has slowly faded into history.
-  Many thanks to Bram Avontuur and everyone who contributed
-  to mp3blaster.
+  mp3blaster is a classic console audio player written by
+  Bram Avontuur: https://github.com/stragulus/mp3blaster
+
+  The story behind this project:
+
+  More than two decades ago, while studying for a science
+  degree, I listened to music with mp3blaster every day in
+  the lab. Sadly, the original has not been maintained
+  since 2017 and has slowly faded into history. Many
+  thanks to Bram Avontuur and everyone who contributed
+  to mp3blaster. I still look back fondly on those days.
 
   Now, mp3blstr brings it back: the same screen layout,
-  shortcut keys, play logic and playlist files as the
-  original, plus modern features - mouse support, true
-  colour themes, Nerd Font icons, a YAML configuration
-  file, session saving and cancellable background scans.
-  It runs on macOS, Windows, Linux and FreeBSD.
+  keyboard shortcuts, playback logic and playlist files
+  as the original, plus modern features - mouse support,
+  true colour themes, Nerd Font icons, YAML configuration
+  and more. It runs on modern operating systems, including
+  macOS, Windows, Linux and FreeBSD.
 
 Mouse support
 =============
@@ -30,7 +32,7 @@ Mouse support
   Click          Move the selection bar to a line.
   Double click   Same as ENTER (play a song, open a group
                  or directory, load a playlist).
-  Right click    Select/unselect a line (like SPACE).
+  Right click    Select or deselect a line (like SPACE).
   Wheel          Scroll through the list.
   Buttons        The CD-player buttons on the right, the
                  shuffle/repeat check boxes, the play mode
@@ -42,14 +44,15 @@ Mouse support
                  (wide information panel).
   Volume bar     Click to set the volume (wide panel).
   Input line     Click to move the cursor in a popup.
-  --no-mouse or ui.mouse: false disables the mouse.
+  Use --no-mouse or ui.mouse: false to disable mouse support.
 
 Popups and dialogs
 ==================
 
   Text input     ENTER accepts, ESC cancels.
                  Bracketed paste inserts text, never commands;
-                 newlines become spaces and do not submit.
+                 newlines become spaces and do not submit
+                 the input.
   Confirmation   'y' confirms; 'n', ESC or ENTER cancel.
   Background scan
                  ESC or 'c' (or a click on Cancel) stops it.
@@ -63,7 +66,7 @@ Adding audio paths
   Quote names containing spaces or use backslash escapes:
       '/Music/An Album/song.mp3' /Music/another\ song.flac
   Multiple paths and HTTP(S) audio streams are supported.
-  Relative paths use the process working directory.
+  Relative paths are resolved from the working directory.
   No shell commands, variables or wildcards are evaluated.
   All paths are checked before any are added to the current
   group; directories must be added through the file manager.
@@ -80,28 +83,29 @@ macOS integration
   Registration failures appear as "System media controls
   unavailable"; use --debug for the full error.
 
-  Now Playing shows title, artist, album, duration and
-  playback position. Pause, resume and seeks resync the
+  Now Playing shows the title, artist, album, duration and
+  playback position. Pausing, resuming and seeking resync the
   system timeline; unknown stream durations are omitted.
   Embedded JPEG/PNG/GIF covers are loaded in the background
   and scaled to at most 1024 pixels per side. Missing covers
-  are normal; corrupt/oversized covers are logged with
+  are normal; corrupt or oversized covers are logged with
   --debug without interrupting playback. No online artwork
   or folder-image lookup is performed.
-  System position controls seek within known-duration,
-  seekable tracks, at whole-second precision. Seeking while
+  System position controls seek within seekable tracks of
+  known duration, with whole-second precision. Seeking while
   paused keeps the track paused. Streams and stopped tracks
   disable position control; stale commands after a track
   change are rejected. macOS decides which controls to show.
   playback.media_keys enables artwork and position control.
-  By default, system sleep and default-output changes pause
-  playback. Wake does not resume it: press Play explicitly.
+  By default, system sleep and changes to the default audio
+  output pause playback. Waking the system does not resume
+  playback: press Play to resume.
   Disable these independently with playback.pause_on_sleep
   and playback.pause_on_output_change. They work even with
   playback.media_keys disabled.
   The audio backend retries supported temporary failures;
   a fatal device error stops the playlist and asks for a
-  restart, preserving the track/position for the next run.
+  restart, preserving the track and position for the next run.
 
 Commands specific to Normal Mode
 ================================
@@ -125,17 +129,17 @@ LOAD/ADD PLAYLIST
 
 WRITE PLAYLIST
   Save the complete playlist as an M3U file in the playlist
-  directory (by default your Music folder). Groups are kept
+  directory (your Music folder by default). Groups are kept
   as group-title tags.
 
 CLEAR PLAYLIST
   Remove all entries from the playlist (without asking!).
-  Only works when nothing is playing.
+  This only works when nothing is playing.
 
 REMOVE DUPLICATES
   Remove repeated song paths across all playlist groups,
-  keeping the first occurrence. Only works when nothing is
-  playing. Press D in Normal Mode.
+  keeping the first occurrence. This only works when nothing
+  is playing. Press D in Normal Mode.
 
 MOVE FILES AFTER / MOVE FILES BEFORE
   Move the selected songs after (or before) the highlighted
@@ -143,15 +147,15 @@ MOVE FILES AFTER / MOVE FILES BEFORE
   can't be moved between groups.
 
 SELECT FILE
-  Select or unselect the highlighted song. Selected entries
+  Select or deselect the highlighted song. Selected entries
   are shown in bold.
 
 DELETE
   Remove the highlighted entry from the playlist.
 
 ENTER
-  On a song: play it immediately. When a playlist was
-  playing it continues after this song.
+  On a song: play it immediately. If a playlist was already
+  playing, it continues after this song.
   On a group: enter the group. The special group '[..]'
   takes you back to the parent group.
 
@@ -160,14 +164,14 @@ TOGGLE REPEAT
   Available in all modes.
 
 TOGGLE GROUPSHUFFLE
-  Play the songs of the current group in random order.
+  Play the songs in the current group in random order.
   Available in all modes.
 
 TOGGLE PLAY MODE
   Choose between playing the current group only, the
-  current group including all its sub groups, or all songs
-  of all groups in random order. Not possible while
-  playing.
+  current group and all its subgroups, or songs from all
+  groups in random order. This cannot be changed during
+  playback.
 
 Commands specific to File Mode
 ==============================
@@ -175,14 +179,14 @@ Commands specific to File Mode
 ADD FILES TO LIST
   Leave File Mode and add all selected files to the
   current group. Files can be selected in several
-  directories before adding them.
+  directories before they are added.
 
 INVERT SELECTION
   Select all unselected files and vice versa.
 
 RECURS. SELECT ALL
-  Add all audio files in this directory and in all its sub
-  directories to the current group. Scanning runs in the
+  Add all audio files in this directory and all its
+  subdirectories to the current group. Scanning runs in the
   background with a progress dialog (current directory,
   files and folders found, elapsed time); press ESC or 'c'
   (or click Cancel) to stop it without adding anything.
@@ -191,8 +195,8 @@ ENTER NEW PATH
   Type the name of a directory to go to.
 
 ADD DIRS AS GROUPS
-  Every sub directory (recursively) containing audio files
-  becomes a group in the playlist. Like RECURS. SELECT ALL
+  Every subdirectory (recursively) containing audio files
+  becomes a group in the playlist. Like RECURS. SELECT ALL,
   this shows a progress dialog and can be cancelled.
 
 ADD URL (SHOUTCAST)
@@ -200,16 +204,16 @@ ADD URL (SHOUTCAST)
   that will be added to the playlist.
 
 TOGGLE FILE SORT
-  Cycle through the 7 sort modes: alphabetical (case
-  insensitive / sensitive), modification date (newest /
-  oldest first), size (smallest / biggest first) and
+  Cycle through the seven sort modes: alphabetical
+  (case-insensitive / case-sensitive), modification date
+  (newest / oldest first), size (smallest / largest first) and
   unsorted. Directories are always listed first.
 
 GO UP ONE DIR
   Go to the parent directory.
 
 SELECT FILE
-  Select or unselect the highlighted file.
+  Select or deselect the highlighted file.
 
 RENAME FILE / DELETE FILE
   Rename the highlighted file or delete it (after asking for
@@ -226,14 +230,14 @@ Commands available in all modes
 
 PLAY SONG          Start the playlist, or pause/resume.
 STOP SONG          Stop playing and reset the playlist.
-PREVIOUS/NEXT SONG Go back in the play history / skip.
-REWIND/FORWARD     Skip SkipLength seconds (default 10).
-SKIP TO END SONG   Jump to the last seconds of the song.
+PREVIOUS/NEXT SONG  Go back in the play history / skip.
+REWIND/FORWARD      Skip SkipLength seconds (default 10).
+SKIP TO END SONG    Jump to the last seconds of the song.
 PREVIOUS/NEXT GROUP
                    Skip the rest of the group being played.
-TOGGLE FADE OUT    Fade out the end of known-length songs (V).
+TOGGLE FADE OUT     Fade out the end of known-length songs (V).
                    The length is set by playback.fade_seconds
-                   in the config file (default 5).
+                   in the configuration file (default 5).
 START SEARCH       Type the beginning of a name to jump to
                    it. The search ends after 2 seconds of
                    inactivity or with ENTER / ESC.
@@ -242,10 +246,10 @@ TOGGLE FILE DISPLAY
                    (playlist), or names, sizes or ID3 tags
                    (file manager).
 SELECT SOME ITEMS  Select entries matching a pattern
-                   (shell wildcards, or regular expressions
+                   (shell wildcards or regular expressions
                    with SelectItems.SearchRegex = yes).
 UNSELECT ALL       Clear the selection.
-CHANGE #THREADS    Size of the read-ahead buffer used for
+CHANGE #THREADS     Set the size of the read-ahead buffer for
                    the next song (0 disables it).
 TOGGLE MIXER DEVICE
                    Switch between Volume and Balance.
@@ -259,22 +263,22 @@ PAN WINDOW LEFT/RIGHT
                    Scroll long names horizontally.
 TOGGLE LIST WRAP   Wrap around at the ends of lists.
 SWITCH THEME       Cycle through the colour themes (classic,
-                   modern) at run time.
+                   modern) at runtime.
 TOGGLE NERD FONT   Switch between plain symbols and Nerd
-                   Font icons at run time.
+                   Font icons at runtime.
 START/END OF LIST, PREVIOUS/NEXT PAGE, MOVE SCROLLBAR
                    Navigate in the main window.
 REFRESH SCREEN     Redraw everything.
 SCROLL HELPTEXT    '-' / '+' page through the key help bar
                    at the top of the screen.
-SHOW HELP          Show (or leave) this screen.
-QUIT MP3BLSTR   Leave the program. Changed settings, the
+SHOW HELP          Open or close this screen.
+QUIT MP3BLSTR       Exit the program. Changed settings, the
                    playlist and the current song and its
-                   position are saved for the next start
-                   (unless state.save is false). Asks
-                   for confirmation first unless
+                   position are saved for the next launch
+                   (unless state.save is false). You are
+                   asked for confirmation first unless
                    ui.confirm_quit is false.
 
-All keys can be changed in the keys section of
+All key bindings can be changed in the keys section of
 ~/.config/mp3blstr/config.yaml. The current bindings are
 listed below.

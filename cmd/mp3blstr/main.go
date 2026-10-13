@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/mingcheng/mp3blstr/internal/app"
@@ -27,8 +28,22 @@ import (
 	"github.com/mingcheng/mp3blstr/internal/ui/theme"
 )
 
-// version is set at build time with -ldflags "-X main.version=...".
-var version = "3.2.6-go"
+// version and buildDate are set at build time with -ldflags -X.
+var version = "dev"
+var buildDate string
+
+// formatVersion returns a human-readable version string based on the
+// provided version and build date.
+func formatVersion(version, date string) string {
+	label := "dev"
+	if version != "" && version != "dev" {
+		label = "v" + strings.TrimPrefix(version, "v")
+	}
+	if date != "" {
+		label += "(" + date + ")"
+	}
+	return label
+}
 
 // Exit codes.
 const (
@@ -102,6 +117,7 @@ func run(args []string) int {
 	u := ui.New(ui.Options{Theme: th, NerdFont: opts.NerdFont, Mouse: opts.Mouse, ListWidth: opts.ListWidth})
 
 	a := app.New(app.Deps{
+		Version:    formatVersion(version, buildDate),
 		Options:    opts,
 		Keys:       km,
 		Matcher:    matcher,
@@ -246,7 +262,7 @@ func usage(err error) int {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 	}
-	config.Usage(os.Stderr, version)
+	config.Usage(os.Stderr, formatVersion(version, buildDate))
 	return exitFailure
 }
 
@@ -257,7 +273,7 @@ func fail(err error) int {
 }
 
 func printVersion() {
-	fmt.Printf("%s version %s - https://github.com/mingcheng/mp3blstr\n", filepath.Base(os.Args[0]), version)
+	fmt.Printf("%s version %s - https://github.com/mingcheng/mp3blstr\n", filepath.Base(os.Args[0]), formatVersion(version, buildDate))
 	fmt.Println("Supported audio formats: MP3 WAV OGG/Vorbis FLAC HTTP-streams")
 	fmt.Println("Supported audio output drivers: native (CoreAudio/WASAPI/PulseAudio/ALSA via oto, no cgo)")
 	fmt.Println("Build features: mouse, themes, nerd-font, read-ahead buffering")

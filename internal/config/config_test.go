@@ -11,6 +11,19 @@ import (
 	"github.com/mingcheng/mp3blstr/internal/playback"
 )
 
+func TestUsageVersionLabel(t *testing.T) {
+	for _, version := range []string{"v1.0.0(20260101)", "dev(20260101)", "dev"} {
+		t.Run(version, func(t *testing.T) {
+			var output strings.Builder
+			Usage(&output, version)
+			firstLine, _, _ := strings.Cut(output.String(), "\n")
+			if !strings.HasPrefix(firstLine, "mp3blstr "+version+" ") {
+				t.Fatalf("usage changed the formatted version label: %s", firstLine)
+			}
+		})
+	}
+}
+
 func TestParseConfig(t *testing.T) {
 	o := Default()
 	err := o.Parse(strings.NewReader(`

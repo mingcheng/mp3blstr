@@ -1,0 +1,109 @@
+name: Build and release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  CGO_ENABLED: "0"
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    # Build and test natively on every supported OS; the binaries need no CGO.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Vet
+        run: make vet
+
+      - name: Test with an isolated session bus
+        if: runner.os == 'Linux'
+        run: dbus-run-session -- make test
+
+      - name: Test
+        if: runner.os != 'Linux'
+        run: make test
+
+      - name: Race detector
+        if: runner.os == 'Linux'
+        run: dbus-run-session -- make race
+
+      - name: Build
+        run: |
+          binary="mp3blstr$(go env GOEXE)"
+          make build BINARY="$binary"
+          "bin/$binary" --version
+
+  release:
+    name: Release
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Snapshot build
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --snapshot --clean
+
+      - name: Upload snapshot artifacts
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        uses: actions/upload-artifact@v7
+        with:
+          name: mp3blstr-snapshot
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
+          if-no-files-found: error
+          retention-days: 7

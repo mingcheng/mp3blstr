@@ -1,6 +1,7 @@
 BINARY  := mp3blstr
-VERSION ?= $(shell git describe --tags --always 2>/dev/null || echo 3.2.6-go)
-LDFLAGS := -s -w -X main.version=$(VERSION)
+VERSION ?= $(shell git describe --tags --exact-match --match 'v*' 2>/dev/null || echo dev)
+BUILD_DATE ?= $(shell date -u +%Y%m%d)
+LDFLAGS := -s -w -X main.version=$(VERSION) -X main.buildDate=$(BUILD_DATE)
 # purego (used by oto) needs this flag to build without cgo on FreeBSD/NetBSD;
 # it is harmless on the other platforms.
 GCFLAGS := github.com/ebitengine/purego/internal/fakecgo=-std

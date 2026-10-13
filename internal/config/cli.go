@@ -133,9 +133,9 @@ func (o *Options) ApplyCLI(c *CLI) error {
 }
 
 // Usage prints the help text of the original program (plus the options
-// that are specific to this implementation).
+// that are specific to this implementation), using the formatted version label.
 func Usage(w io.Writer, version string) {
-	fmt.Fprintf(w, "mp3blstr v%s - mp3blaster reborn, a Go port of Mp3blaster (C)1997 - 2009 Bram Avontuur.\n", version)
+	fmt.Fprintf(w, "mp3blstr %s is a modern re-implementation of the classic mp3blaster, authored by mingcheng<mingcheng@outlook.com>.\n", version)
 	fmt.Fprint(w, `Usage:
 	mp3blstr [options]
 	mp3blstr [options] [file1 ...]
