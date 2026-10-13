@@ -407,7 +407,8 @@ func TestRepeatShuffleAndHelpBarCategories(t *testing.T) {
 	}
 
 	lines := a.HelpBarLines()
-	if lines[0][0].Desc != "Select Files" || lines[3][0].Desc != "Delete" || len(lines[3]) != 1 {
+	if lines[0][0].Desc != "Select Files" || lines[3][0].Desc != "Delete" || len(lines[3]) != 2 ||
+		lines[3][1].Cmd != keys.CmdAddPaths {
 		t.Fatal("each category should start on a new line")
 	}
 	if lines[4][0].Cmd != keys.CmdToggleRepeat || lines[4][1].Cmd != keys.CmdToggleShuffle {

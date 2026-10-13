@@ -102,6 +102,7 @@ type Track interface {
 	Elapsed() int               // play position in seconds
 	Seek(delta int) error       // move the position by delta seconds
 	SeekFromEnd(secs int) error // jump to secs seconds before the end
+	Seekable() bool             // whether the opened source supports seeking
 	Err() error                 // the error that ended playback (after Stop)
 }
 
@@ -175,6 +176,7 @@ type Controller struct {
 	haveInfo bool
 	elapsed  int
 	nextName string
+	revision int
 }
 
 // New creates a controller for the playlist rooted at root.
@@ -221,6 +223,15 @@ func (c *Controller) SongInfo() (path string, info media.SongInfo, ok bool) {
 // Elapsed returns the playing time of the current song.
 func (c *Controller) Elapsed() int { return c.elapsed }
 
+// Revision changes when the track or its playback position is replaced.
+func (c *Controller) Revision() int { return c.revision }
+
+func (c *Controller) TrackID() int { return c.gen }
+
+func (c *Controller) CanSeek() bool {
+	return c.track != nil && !c.opening && c.info.TotalSeconds > 0 && c.track.Seekable()
+}
+
 // NextSongName returns the name of the song that will play next.
 func (c *Controller) NextSongName() string { return c.nextName }
 
@@ -231,6 +242,7 @@ func (c *Controller) Play() {
 	if c.opening {
 		return
 	}
+
 	c.playing = true
 	if c.track != nil {
 		if c.paused {
@@ -238,9 +250,8 @@ func (c *Controller) Play() {
 			c.track.Start()
 			c.status = StatusPlay
 		} else {
-			c.paused = true
-			c.track.Pause()
-			c.status = StatusPause
+			c.Pause()
+			return
 		}
 		c.changed()
 		return
@@ -252,6 +263,21 @@ func (c *Controller) Play() {
 		return
 	}
 	c.advance()
+	c.changed()
+}
+
+// Pause also applies to an in-flight open, preventing a delayed decoder from
+// starting audio after a sleep or output-device change.
+func (c *Controller) Pause() {
+	if !c.playing || c.paused {
+		return
+	}
+	c.paused = true
+	if c.track != nil {
+		c.track.Pause()
+		c.elapsed = c.track.Elapsed()
+	}
+	c.status = StatusPause
 	c.changed()
 }
 
@@ -376,32 +402,45 @@ func (c *Controller) Previous() {
 // Forward skips SkipSeconds ahead.
 func (c *Controller) Forward() {
 	if c.playing && c.track != nil {
-		_ = c.track.Seek(c.SkipSeconds)
-		c.Tick()
+		c.seek(c.track.Elapsed() + c.SkipSeconds)
 	}
 }
 
 // Rewind skips SkipSeconds back.
 func (c *Controller) Rewind() {
 	if c.playing && c.track != nil {
-		_ = c.track.Seek(-c.SkipSeconds)
-		c.Tick()
+		c.seek(c.track.Elapsed() - c.SkipSeconds)
 	}
 }
 
 // SeekTo jumps to an absolute position (in seconds) in the current song.
 func (c *Controller) SeekTo(secs int) {
 	if c.playing && c.track != nil {
-		_ = c.track.Seek(secs - c.track.Elapsed())
-		c.Tick()
+		c.seek(secs)
 	}
+}
+
+func (c *Controller) seek(secs int) {
+	if err := c.track.Seek(max(secs, 0) - c.track.Elapsed()); err != nil {
+		c.listener.Warning(fmt.Sprintf("Couldn't seek: %v", err))
+	}
+	// Resync the actual position even when the system optimistically moved
+	// its timeline but the decoder rejected the seek.
+	c.revision++
+	c.elapsed = c.track.Elapsed()
+	c.changed()
 }
 
 // SkipToEnd jumps to the last seconds of the song.
 func (c *Controller) SkipToEnd() {
 	if c.playing && c.track != nil {
-		_ = c.track.SeekFromEnd(8)
-		c.Tick()
+		if err := c.track.SeekFromEnd(8); err != nil {
+			c.listener.Warning(fmt.Sprintf("Couldn't seek: %v", err))
+			return
+		}
+		c.revision++
+		c.elapsed = c.track.Elapsed()
+		c.changed()
 	}
 }
 
@@ -553,12 +592,14 @@ func (c *Controller) opened(gen int, song string, tr Track, err error) {
 	}
 	c.opening = false
 	if err != nil {
+		position := c.seekOnOpen
 		c.seekOnOpen = 0
 		c.status = StatusStop
 		c.listener.Warning(errorText(err))
 		if errors.Is(err, media.ErrDeviceOpen) {
 			// Every other song would fail as well.
 			c.stopList()
+			c.Resume(song, position)
 		} else {
 			c.advance()
 		}
@@ -566,8 +607,8 @@ func (c *Controller) opened(gen int, song string, tr Track, err error) {
 		return
 	}
 	c.track = tr
-	c.paused = false
 	c.songPath = song
+	c.revision++
 	c.info = tr.Info()
 	c.haveInfo = true
 	c.elapsed = 0
@@ -579,7 +620,11 @@ func (c *Controller) opened(gen int, song string, tr Track, err error) {
 	}
 	quit := make(chan struct{})
 	c.trackQuit = quit
-	tr.Start()
+	if c.paused {
+		c.status = StatusPause
+	} else {
+		tr.Start()
+	}
 	c.listener.SongStarted(c.info)
 	go func() {
 		select {
@@ -596,13 +641,20 @@ func (c *Controller) finished(gen int) {
 	if gen != c.gen || c.track == nil {
 		return
 	}
-	c.stopSong()
-	c.advance()
+	if err := c.stopSong(); errors.Is(err, media.ErrDeviceLost) {
+		c.stopList()
+		c.Resume(c.songPath, c.elapsed)
+	} else {
+		c.advance()
+	}
 	c.changed()
 }
 
 // errorText returns the classic message for err.
 func errorText(err error) string {
+	if errors.Is(err, media.ErrDeviceLost) {
+		return err.Error()
+	}
 	var se media.SoundError
 	if errors.As(err, &se) {
 		return se.Error()
@@ -612,7 +664,7 @@ func errorText(err error) string {
 
 // stopSong stops the current song (or cancels opening one) without
 // changing the playlist state.
-func (c *Controller) stopSong() {
+func (c *Controller) stopSong() error {
 	c.gen++
 	c.opening = false
 	c.seekOnOpen = 0
@@ -624,6 +676,7 @@ func (c *Controller) stopSong() {
 			close(c.trackQuit)
 			c.trackQuit = nil
 		}
+		c.elapsed = c.track.Elapsed()
 		c.track.Stop()
 		if err = c.track.Err(); err == nil {
 			c.allowRepeat = true
@@ -636,6 +689,7 @@ func (c *Controller) stopSong() {
 	if err != nil {
 		c.listener.Warning(errorText(err))
 	}
+	return err
 }
 
 // stopList ends playing the playlist.

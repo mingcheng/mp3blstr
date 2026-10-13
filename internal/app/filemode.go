@@ -104,7 +104,11 @@ func (a *App) execFileCommand(cmd keys.Command) {
 			break
 		}
 		path, name := fm.Path(v.Cursor), fm.Entry(v.Cursor).Name
-		a.openConfirm([]string{"Delete this file permanently?", name}, func() {
+		prompt := "Delete this file permanently?"
+		if a.Opts.UseTrash {
+			prompt = "Move this file to the Trash?"
+		}
+		a.openConfirm([]string{prompt, name}, func() {
 			a.deleteFile(path)
 		})
 	case keys.CmdFileEnter:
@@ -272,13 +276,18 @@ func (a *App) deleteFile(path string) {
 	if a.Mode != keys.ModeFileSelection {
 		return
 	}
-	if err := os.Remove(path); err != nil {
-		a.Warning("Could not delete file.")
+	remove, message := os.Remove, "File deleted."
+	if a.Opts.UseTrash {
+		remove, message = a.trash, "File moved to the Trash."
+	}
+	if err := remove(path); err != nil {
+		a.log.Warn("file removal failed", "path", path, "trash", a.Opts.UseTrash, "err", err)
+		a.Warning(fmt.Sprintf("Could not remove file: %v", err))
 		return
 	}
 	media.ForgetID3(path)
 	a.fmReload()
-	a.SetMessage("File deleted.")
+	a.SetMessage(message)
 }
 
 // renameFile renames the file under the cursor; existing files are never

@@ -4,8 +4,10 @@
 package ui
 
 import (
+	"sync/atomic"
 	"time"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	"github.com/mingcheng/mp3blstr/internal/app"
@@ -25,19 +27,24 @@ type Options struct {
 
 // UI is the terminal user interface. It implements app.View.
 type UI struct {
-	tapp   *tview.Application
-	screen *Screen
-	app    *app.App
+	tapp         *tview.Application
+	screen       *Screen
+	app          *app.App
+	tickWake     chan struct{}
+	tickInterval atomic.Int64
 }
 
 // New creates the interface. Call Attach before Run.
 func New(opts Options) *UI {
 	u := &UI{
-		tapp:   tview.NewApplication(),
-		screen: newScreen(opts.Theme, theme.For(opts.Theme, opts.NerdFont), opts.NerdFont, opts.ListWidth),
+		tapp:     tview.NewApplication(),
+		screen:   newScreen(opts.Theme, theme.For(opts.Theme, opts.NerdFont), opts.NerdFont, opts.ListWidth),
+		tickWake: make(chan struct{}, 1),
 	}
 	u.tapp.EnableMouse(opts.Mouse)
+	u.tapp.EnablePaste(true)
 	u.tapp.SetRoot(u.screen, true)
+	u.tapp.SetAfterDrawFunc(func(tcell.Screen) { u.scheduleTick() })
 	return u
 }
 
@@ -68,25 +75,47 @@ func (u *UI) Quit() { u.tapp.Stop() }
 func (u *UI) Run() error {
 	done := make(chan struct{})
 	defer close(done)
+	u.scheduleTick()
 	go u.tick(done)
 	return u.tapp.Run()
 }
 
-// tick updates the play time periodically until done is closed. The screen
-// is only redrawn when something changed, so an idle player uses no CPU.
+// tick disables its timer while idle and redraws only when something changed.
 func (u *UI) tick(done <-chan struct{}) {
-	t := time.NewTicker(u.app.TickInterval())
+	t := time.NewTimer(time.Hour)
+	t.Stop()
 	defer t.Stop()
 	for {
+		var ticks <-chan time.Time
+		if interval := time.Duration(u.tickInterval.Load()); interval > 0 {
+			t.Reset(interval)
+			ticks = t.C
+		}
 		select {
 		case <-done:
 			return
-		case <-t.C:
+		case <-u.tickWake:
+			t.Stop()
+		case <-ticks:
 			u.tapp.QueueUpdate(func() {
 				if u.app.Tick() {
 					u.tapp.ForceDraw() // safe within a queued update
 				}
 			})
 		}
+	}
+}
+
+func (u *UI) scheduleTick() {
+	if u.app == nil {
+		return
+	}
+	interval := int64(u.app.TickInterval())
+	if u.tickInterval.Swap(interval) == interval {
+		return
+	}
+	select {
+	case u.tickWake <- struct{}{}:
+	default:
 	}
 }

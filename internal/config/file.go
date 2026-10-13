@@ -129,11 +129,13 @@ func keywords(o *Options) map[string]keyword {
 		"ui.confirm_quit": boolKw(&o.ConfirmQuit),
 		"ui.pan_size":     numberKw(&o.PanSize, func(n int) bool { return n >= 1 && n <= 40 }),
 
-		"playback.play_mode":    parsedKw(&o.PlayMode, playback.ParsePlayMode),
-		"playback.media_keys":   boolKw(&o.MediaKeys),
-		"playback.repeat":       boolKw(&o.Repeat),
-		"playback.fade_out":     boolKw(&o.FadeOut),
-		"playback.fade_seconds": numberKw(&o.FadeSeconds, nonNegative),
+		"playback.play_mode":              parsedKw(&o.PlayMode, playback.ParsePlayMode),
+		"playback.media_keys":             boolKw(&o.MediaKeys),
+		"playback.pause_on_sleep":         boolKw(&o.PauseOnSleep),
+		"playback.pause_on_output_change": boolKw(&o.PauseOnOutputChange),
+		"playback.repeat":                 boolKw(&o.Repeat),
+		"playback.fade_out":               boolKw(&o.FadeOut),
+		"playback.fade_seconds":           numberKw(&o.FadeSeconds, nonNegative),
 		"playback.threads": {typ: typeNumber, apply: func(v []string) error {
 			n, _ := strconv.Atoi(v[0])
 			if !o.SetThreads(n) {
@@ -149,6 +151,7 @@ func keywords(o *Options) map[string]keyword {
 		"files.sort_mode":         parsedKw(&o.SortMode, filemanager.ParseSortMode),
 		"files.display_mode":      parsedKw(&o.FileDisplayMode, filemanager.ParseDisplayMode),
 		"files.hide_others":       boolKw(&o.HideOthers),
+		"files.use_trash":         boolKw(&o.UseTrash),
 		"files.id3_names":         boolKw(&o.ID3Names),
 		"files.guess_legacy_tags": boolKw(&o.GuessLegacyTags),
 		"files.metadata_cache":    boolKw(&o.MetadataCache),

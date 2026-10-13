@@ -72,6 +72,7 @@ const (
 	CmdToggleTheme
 	CmdToggleNerdFont
 	CmdRemoveDuplicates
+	CmdAddPaths
 )
 
 // Mode is a bit mask of program modes, so a binding can be valid in several.
@@ -91,6 +92,7 @@ const (
 // "key.file.addfiles". Deprecated aliases from the original are kept.
 var configNames = map[string]Command{
 	"key.selectfiles":          CmdSelectFiles,
+	"key.addpaths":             CmdAddPaths,
 	"key.addgroup":             CmdAddGroup,
 	"key.loadplaylist":         CmdLoadPlaylist,
 	"key.writeplaylist":        CmdWritePlaylist,

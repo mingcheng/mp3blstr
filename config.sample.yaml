@@ -39,7 +39,10 @@ ui:
 playback:
   # play_mode: allgroups     # onegroup, allgroups or allrandom
   # media_keys: true         # global media controls (Linux MPRIS, Windows hotkeys,
-  #                          # macOS Now Playing); false disables registration
+  #                          # macOS Now Playing with embedded artwork and seeking);
+  #                          # false disables registration and artwork loading
+  # pause_on_sleep: true     # macOS: pause on sleep; wake never auto-resumes
+  # pause_on_output_change: true # macOS: pause when the default audio output changes
   # repeat: false
   # fade_out: false          # fade out at the end of known-length tracks (toggle: V)
   # fade_seconds: 5          # fade duration in seconds (config file only, 0 disables)
@@ -54,6 +57,8 @@ files:
   #                          # size-small, size-big, none
   # display_mode: size       # file manager: plain, size or id3 (toggle: f)
   # hide_others: false       # hide files that are neither audio nor playlists
+  # use_trash: false         # macOS: confirmed file deletion uses the system Trash;
+  #                          # failure never falls back to permanent deletion
   # id3_names: false         # legacy default for file manager ID3 display
   # guess_legacy_tags: false # guess mislabeled UTF-8/GBK/GB18030 ID3 text;
   #                          # opt in: detection costs time on large lists
@@ -95,6 +100,7 @@ state:
 # Bindings that are handy when F-keys are taken by the terminal emulator
 # (repeat and shuffle already have R and Z):
 keys:
+  # add_paths: a             # quote/escape spaces, or drag files into this dialog
   # select_files: "1"
   # remove_duplicates: "D"
   # add_group: "2"

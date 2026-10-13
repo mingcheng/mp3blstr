@@ -27,25 +27,28 @@ type KeyBinding struct {
 // Options are the global settings (globalopts in the original).
 type Options struct {
 	NoMixer     bool
-	FPL         int // frames per loop, 1..10 (controls the display refresh rate)
+	FPL         int // legacy frames per loop, 1..10 (controls scan animation)
 	Downsample  bool
 	EightBits   bool
 	SoundDevice string
 	MixerDevice string
 
-	SortMode        filemanager.SortMode
-	HideOthers      bool
-	PlayMode        playback.PlayMode
-	MediaKeys       bool
-	Repeat          bool
-	FadeOut         bool
-	FadeSeconds     int // seconds of end-of-track fade, set in config only
-	SkipSeconds     int // seconds skipped by forward/rewind
-	PanSize         int // columns panned by left/right
-	Debug           bool
-	DisplayMode     playlist.DisplayMode
-	FileDisplayMode filemanager.DisplayMode
-	Threads         int // read-ahead buffer (0..500 in steps of 50)
+	SortMode            filemanager.SortMode
+	HideOthers          bool
+	PlayMode            playback.PlayMode
+	MediaKeys           bool
+	PauseOnSleep        bool
+	PauseOnOutputChange bool
+	UseTrash            bool
+	Repeat              bool
+	FadeOut             bool
+	FadeSeconds         int // seconds of end-of-track fade, set in config only
+	SkipSeconds         int // seconds skipped by forward/rewind
+	PanSize             int // columns panned by left/right
+	Debug               bool
+	DisplayMode         playlist.DisplayMode
+	FileDisplayMode     filemanager.DisplayMode
+	Threads             int // read-ahead buffer (0..500 in steps of 50)
 
 	AudioPatterns    []string
 	PlaylistPatterns []string
@@ -93,6 +96,8 @@ func Default() *Options {
 		SortMode:              filemanager.SortAlpha,
 		PlayMode:              playback.PlayGroups,
 		MediaKeys:             true,
+		PauseOnSleep:          true,
+		PauseOnOutputChange:   true,
 		FadeSeconds:           5,
 		SkipSeconds:           10,
 		PanSize:               5,

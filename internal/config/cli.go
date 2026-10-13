@@ -166,9 +166,9 @@ Options:
 	--dont-quit/-q: Don't quit after playing mp3[s] (only makes sense
 		in combination with --autolist or files from command-line)
 	--repeat/-R: Repeat playlist.
-	--runframes/-r=<number>: Number of frames to decode in one loop.
-		Range: 1 to 10 (default=5). A low value means that the
-		interface (while playing) reacts faster.
+	--runframes/-r=<number>: Legacy scan-animation refresh setting.
+		Range: 1 to 10 (default=5). Playback time updates once a
+		second; idle/paused players do not poll the display.
 	--sound-device/-s=<device>: Device to use to output sound
 		(accepted for compatibility; the system default is used).
 	--threads/-t=<amount>: Size of the read-ahead buffer in frames.

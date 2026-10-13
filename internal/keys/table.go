@@ -90,6 +90,7 @@ func Default() *Table {
 		entry{r('m'), CmdMoveAfter, N, "Move Files After"},
 		entry{r('M'), CmdMoveBefore, N, "Move Files Before"},
 		entry{r('d'), CmdDel, N, "Delete"},
+		entry{r('a'), CmdAddPaths, NF, "Add Audio Paths"},
 	)
 	add(GroupFiles, false,
 		entry{f(1), CmdFileAddFiles, F, "Add Files To List"},

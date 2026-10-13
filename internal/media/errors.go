@@ -11,6 +11,7 @@ func (e SoundError) Error() string { return string(e) }
 // Sound errors.
 const (
 	ErrDeviceOpen SoundError = "Failed to open sound device."
+	ErrDeviceLost SoundError = "Audio device failed; restart mp3blstr to reopen it."
 	ErrFileOpen   SoundError = "Failed to open file for reading."
 	ErrFileRead   SoundError = "Failed to read file."
 	ErrHTTP       SoundError = "Http request failed."

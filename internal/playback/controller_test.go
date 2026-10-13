@@ -10,38 +10,59 @@ import (
 )
 
 type fakeTrack struct {
-	path    string
-	done    chan struct{}
-	stopped bool
-	paused  bool
-	pos     int
+	path       string
+	done       chan struct{}
+	stopped    bool
+	paused     bool
+	pos        int
+	err        error
+	starts     int
+	seekErr    error
+	unseekable bool
 }
 
-func (t *fakeTrack) Start()                { t.paused = false }
+func (t *fakeTrack) Start()                { t.paused = false; t.starts++ }
 func (t *fakeTrack) Pause()                { t.paused = true }
 func (t *fakeTrack) Stop()                 { t.stopped = true }
 func (t *fakeTrack) Done() <-chan struct{} { return t.done }
 func (t *fakeTrack) Info() media.SongInfo  { return media.SongInfo{TotalSeconds: 60} }
 func (t *fakeTrack) Elapsed() int          { return t.pos }
-func (t *fakeTrack) Seek(d int) error      { t.pos += d; return nil }
+func (t *fakeTrack) Seek(d int) error {
+	if t.seekErr != nil {
+		return t.seekErr
+	}
+	t.pos += d
+	return nil
+}
 func (t *fakeTrack) SeekFromEnd(int) error { return nil }
-func (t *fakeTrack) Err() error            { return nil }
+func (t *fakeTrack) Seekable() bool        { return !t.unseekable }
+func (t *fakeTrack) Err() error            { return t.err }
 
-type fakeBackend struct{ opened []string }
+type fakeBackend struct {
+	opened []string
+	err    error
+}
 
 func (b *fakeBackend) Opener(p string) func() (Track, error) {
 	b.opened = append(b.opened, p)
-	return func() (Track, error) { return &fakeTrack{path: p, done: make(chan struct{})}, nil }
+	err := b.err
+	return func() (Track, error) {
+		if err != nil {
+			return nil, err
+		}
+		return &fakeTrack{path: p, done: make(chan struct{})}, nil
+	}
 }
 
 type fakeListener struct {
-	cur  *playlist.Group
-	quit bool
+	cur     *playlist.Group
+	quit    bool
+	warning string
 }
 
 func (l *fakeListener) Changed()                      {}
 func (l *fakeListener) SongStarted(media.SongInfo)    {}
-func (l *fakeListener) Warning(string)                {}
+func (l *fakeListener) Warning(s string)              { l.warning = s }
 func (l *fakeListener) Message(string)                {}
 func (l *fakeListener) ClearMessage()                 {}
 func (l *fakeListener) EndOfPlaylistQuit()            { l.quit = true }

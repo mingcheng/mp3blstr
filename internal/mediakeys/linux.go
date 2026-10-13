@@ -29,14 +29,14 @@ func (root) Quit() *dbus.Error  { return nil }
 
 // player implements the org.mpris.MediaPlayer2.Player methods. Seek is
 // renamed on export (see playerMethods) to keep go vet's io.Seeker check quiet.
-type player struct{ post func(Action) }
+type player struct{ post func(Command) }
 
-func (p player) PlayPause() *dbus.Error                       { p.post(PlayPause); return nil }
-func (p player) Play() *dbus.Error                            { p.post(Play); return nil }
-func (p player) Pause() *dbus.Error                           { p.post(Pause); return nil }
-func (p player) Next() *dbus.Error                            { p.post(Next); return nil }
-func (p player) Previous() *dbus.Error                        { p.post(Previous); return nil }
-func (p player) Stop() *dbus.Error                            { p.post(Stop); return nil }
+func (p player) PlayPause() *dbus.Error                       { p.post(Command{Action: PlayPause}); return nil }
+func (p player) Play() *dbus.Error                            { p.post(Command{Action: Play}); return nil }
+func (p player) Pause() *dbus.Error                           { p.post(Command{Action: Pause}); return nil }
+func (p player) Next() *dbus.Error                            { p.post(Command{Action: Next}); return nil }
+func (p player) Previous() *dbus.Error                        { p.post(Command{Action: Previous}); return nil }
+func (p player) Stop() *dbus.Error                            { p.post(Command{Action: Stop}); return nil }
 func (player) SeekMPRIS(int64) *dbus.Error                    { return nil }
 func (player) SetPosition(dbus.ObjectPath, int64) *dbus.Error { return nil }
 func (player) OpenUri(string) *dbus.Error                     { return nil }
@@ -50,7 +50,7 @@ type mpris struct {
 
 func constant(v any) *prop.Prop { return &prop.Prop{Value: v, Emit: prop.EmitConst} }
 
-func Start(post func(Action)) (Controller, error) {
+func Start(post func(Command), _ func(error)) (Controller, error) {
 	conn, err := dbus.ConnectSessionBus()
 	if err != nil {
 		return nil, err
@@ -63,7 +63,7 @@ func Start(post func(Action)) (Controller, error) {
 	return c, nil
 }
 
-func export(conn *dbus.Conn, post func(Action)) (*mpris, error) {
+func export(conn *dbus.Conn, post func(Command)) (*mpris, error) {
 	p := player{post}
 	if err := conn.Export(root{}, playerPath, rootIface); err != nil {
 		return nil, err
@@ -128,11 +128,11 @@ func export(conn *dbus.Conn, post func(Action)) (*mpris, error) {
 
 func (m *mpris) Close() error { return m.conn.Close() }
 
-func (m *mpris) Update(status string) {
+func (m *mpris) Update(s Snapshot) {
 	// SetMust panics when the change signal cannot be sent, e.g. after the
 	// session bus went away; media keys must never take the player down.
 	defer func() { _ = recover() }()
-	if m.props.GetMust(playerIface, "PlaybackStatus") != status {
-		m.props.SetMust(playerIface, "PlaybackStatus", status)
+	if m.props.GetMust(playerIface, "PlaybackStatus") != s.Status {
+		m.props.SetMust(playerIface, "PlaybackStatus", s.Status)
 	}
 }

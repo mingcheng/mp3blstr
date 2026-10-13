@@ -48,10 +48,60 @@ Popups and dialogs
 ==================
 
   Text input     ENTER accepts, ESC cancels.
+                 Bracketed paste inserts text, never commands;
+                 newlines become spaces and do not submit.
   Confirmation   'y' confirms; 'n', ESC or ENTER cancel.
   Background scan
                  ESC or 'c' (or a click on Cancel) stops it.
                  Music keeps playing while scanning.
+
+Adding audio paths
+==================
+
+  Press 'a' in Normal or File Mode to open Add Audio Paths.
+  Paste or drag audio files into the dialog, then press ENTER.
+  Quote names containing spaces or use backslash escapes:
+      '/Music/An Album/song.mp3' /Music/another\ song.flac
+  Multiple paths and HTTP(S) audio streams are supported.
+  Relative paths use the process working directory.
+  No shell commands, variables or wildcards are evaluated.
+  All paths are checked before any are added to the current
+  group; directories must be added through the file manager.
+  Rebind with keys.add_paths in the configuration file.
+
+macOS integration
+=================
+
+  Find playback controls in Control Center > Now Playing,
+  not Notification Center. Add the Now Playing control if
+  it is missing. To show a menu-bar icon, enable Now Playing
+  in System Settings > Menu Bar (Control Center on some
+  versions). App notification permissions are unrelated.
+  Registration failures appear as "System media controls
+  unavailable"; use --debug for the full error.
+
+  Now Playing shows title, artist, album, duration and
+  playback position. Pause, resume and seeks resync the
+  system timeline; unknown stream durations are omitted.
+  Embedded JPEG/PNG/GIF covers are loaded in the background
+  and scaled to at most 1024 pixels per side. Missing covers
+  are normal; corrupt/oversized covers are logged with
+  --debug without interrupting playback. No online artwork
+  or folder-image lookup is performed.
+  System position controls seek within known-duration,
+  seekable tracks, at whole-second precision. Seeking while
+  paused keeps the track paused. Streams and stopped tracks
+  disable position control; stale commands after a track
+  change are rejected. macOS decides which controls to show.
+  playback.media_keys enables artwork and position control.
+  By default, system sleep and default-output changes pause
+  playback. Wake does not resume it: press Play explicitly.
+  Disable these independently with playback.pause_on_sleep
+  and playback.pause_on_output_change. They work even with
+  playback.media_keys disabled.
+  The audio backend retries supported temporary failures;
+  a fatal device error stops the playlist and asks for a
+  restart, preserving the track/position for the next run.
 
 Commands specific to Normal Mode
 ================================
@@ -163,7 +213,10 @@ SELECT FILE
 
 RENAME FILE / DELETE FILE
   Rename the highlighted file or delete it (after asking for
-  confirmation).
+  confirmation). On macOS, files.use_trash: true changes
+  deletion to Move to Trash. A failed Trash operation never
+  permanently deletes the file. The default remains permanent
+  deletion; playlist deletion only removes an entry.
 
 ENTER
   Enter a directory, load a playlist or play a song.

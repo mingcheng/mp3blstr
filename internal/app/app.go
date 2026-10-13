@@ -145,8 +145,9 @@ type App struct {
 	durationQueue []string
 	durationBusy  bool
 
-	view View
-	log  *slog.Logger
+	view  View
+	log   *slog.Logger
+	trash func(string) error
 }
 
 // defaultGroupTitle is the title of the root group and of new groups.
@@ -161,9 +162,10 @@ type Deps struct {
 	FadeMixer  *audio.Mixer     // output mixer when different from the visible mixer
 	Backend    playback.Backend // opens songs for the player
 	View       View
-	StartDir   string       // initial directory of the file manager
-	StatusFile string       // --status-file; "" for none
-	Logger     *slog.Logger // nil discards debug output
+	StartDir   string             // initial directory of the file manager
+	StatusFile string             // --status-file; "" for none
+	Logger     *slog.Logger       // nil discards debug output
+	Trash      func(string) error // nil uses the native file manager
 }
 
 // New creates the application.
@@ -190,7 +192,11 @@ func New(d Deps) *App {
 		statusFile: d.StatusFile,
 		view:       d.View,
 		log:        log,
+		trash:      d.Trash,
 		help:       append(strings.Split(strings.TrimRight(helpText, "\n"), "\n"), keyReference(d.Keys)...),
+	}
+	if a.trash == nil {
+		a.trash = filemanager.Trash
 	}
 	a.Player = playback.New(root, d.Backend, d.View.Post, (*listener)(a))
 	a.Player.Mode = d.Options.PlayMode
@@ -319,10 +325,16 @@ func (a *App) Tick() bool { return a.Player.Tick() || a.Task != nil }
 // mpegFrameDuration is the length of an MPEG audio frame at 44.1 kHz.
 const mpegFrameDuration = 26 * time.Millisecond
 
-// TickInterval is the display refresh interval derived from --runframes
-// (frames decoded per loop in the original).
+// TickInterval is zero when no animation is needed. --runframes controls
+// scan animation; playback time only needs a once-per-second refresh.
 func (a *App) TickInterval() time.Duration {
-	return time.Duration(a.Opts.FPL) * 2 * mpegFrameDuration
+	if a.Task != nil {
+		return time.Duration(a.Opts.FPL) * 2 * mpegFrameDuration
+	}
+	if !a.Player.HasSong() || a.Player.Paused() {
+		return 0
+	}
+	return time.Second
 }
 
 // --- main window ------------------------------------------------------------

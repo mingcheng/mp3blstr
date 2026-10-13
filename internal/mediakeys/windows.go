@@ -13,7 +13,7 @@ type hotkeys struct {
 	done       chan struct{}
 }
 
-func Start(post func(Action)) (Controller, error) {
+func Start(post func(Command), _ func(error)) (Controller, error) {
 	controls := &hotkeys{done: make(chan struct{})}
 	for _, binding := range []struct {
 		key    hotkey.Key
@@ -41,7 +41,7 @@ func Start(post func(Action)) (Controller, error) {
 						continue
 					}
 					if done != nil {
-						post(action)
+						post(Command{Action: action})
 					}
 				case _, ok := <-keyup:
 					if !ok {
@@ -59,7 +59,7 @@ func Start(post func(Action)) (Controller, error) {
 	return controls, nil
 }
 
-func (*hotkeys) Update(string) {}
+func (*hotkeys) Update(Snapshot) {}
 
 func (h *hotkeys) Close() error {
 	close(h.done)

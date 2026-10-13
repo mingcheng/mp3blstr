@@ -19,7 +19,11 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go vet ./...
+      - name: Test with an isolated session bus
+        if: runner.os == 'Linux'
+        run: dbus-run-session -- go test ./...
       - run: go test ./...
+        if: runner.os != 'Linux'
       - run: go build -o bin/ ./cmd/mp3blstr
       - name: Cross-compile without cgo
         if: runner.os == 'Linux'

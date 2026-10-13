@@ -6,10 +6,12 @@ package audio
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"math"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ebitengine/oto/v3"
@@ -36,8 +38,26 @@ type Options struct {
 type Output struct {
 	mixer   *Mixer
 	once    sync.Once
-	ctx     *oto.Context
+	ctx     outputContext
 	initErr error
+	mu      sync.Mutex
+	active  int
+}
+
+type outputContext interface {
+	NewPlayer(io.Reader) *oto.Player
+	Suspend() error
+	Resume() error
+	Err() error
+}
+
+type outputPlayer interface {
+	Play()
+	Pause()
+	PauseAndStopReading()
+	BufferedSize() int
+	Seek(int64, int) (int64, error)
+	Err() error
 }
 
 // NewOutput creates the output. The device is opened lazily on first use.
@@ -63,13 +83,15 @@ func (o *Output) init() error {
 			return
 		}
 		o.ctx = ctx
+		o.initErr = ctx.Suspend()
 	})
 	return o.initErr
 }
 
 // Player plays one song. It implements playback.Track.
 type Player struct {
-	out      *oto.Player
+	out      outputPlayer
+	output   *Output
 	pcm      *pcmReader
 	rate     int // sample rate of the decoded source
 	info     media.SongInfo
@@ -79,7 +101,11 @@ type Player struct {
 	done     chan struct{} // closed by watch at the end of the song
 	stop     chan struct{} // closed by Stop
 	stopOnce sync.Once
-	err      error // set by Stop, see Err
+	wake     chan struct{}
+	watched  chan struct{}
+	active   atomic.Bool
+	errMu    sync.Mutex
+	err      error
 }
 
 // Open decodes path and prepares it for playback (paused). It may block on
@@ -87,6 +113,9 @@ type Player struct {
 func (o *Output) Open(path string, opts Options) (*Player, error) {
 	if err := o.init(); err != nil {
 		return nil, fmt.Errorf("%w (%v)", media.ErrDeviceOpen, err)
+	}
+	if err := o.ctx.Err(); err != nil {
+		return nil, fmt.Errorf("%w: %w: %v", media.ErrDeviceOpen, media.ErrDeviceLost, err)
 	}
 	d, err := decode(path)
 	if err != nil {
@@ -123,6 +152,7 @@ func (o *Output) Open(path string, opts Options) (*Player, error) {
 	s = o.mixer.fadeOut(s, totalFrames, fadeDurationFrames(totalFrames, opts.FadeSeconds), &fadePosition)
 
 	p := &Player{
+		output:   o,
 		pcm:      &pcmReader{src: src, s: o.mixer.Streamer(s), fadePosition: &fadePosition, sourceRate: int64(d.format.SampleRate)},
 		rate:     int(d.format.SampleRate),
 		info:     d.info,
@@ -130,6 +160,8 @@ func (o *Output) Open(path string, opts Options) (*Player, error) {
 		cancel:   d.cancel,
 		done:     make(chan struct{}),
 		stop:     make(chan struct{}),
+		wake:     make(chan struct{}, 1),
+		watched:  make(chan struct{}),
 	}
 	p.out = o.ctx.NewPlayer(p.pcm)
 	go p.watch()
@@ -146,18 +178,81 @@ func fadeDurationFrames(total int64, seconds int) int64 {
 
 // watch closes Done once the stream ended and oto played all buffered data.
 func (p *Player) watch() {
-	t := time.NewTicker(20 * time.Millisecond)
+	defer close(p.watched)
+	t := time.NewTimer(20 * time.Millisecond)
+	t.Stop()
 	defer t.Stop()
 	for {
-		select {
-		case <-p.stop:
+		if isClosed(p.stop) {
 			return
-		case <-t.C:
+		}
+		if err := p.playbackError(); err != nil {
+			p.setError(err)
+			close(p.done)
+			return
+		}
+		var ticks <-chan time.Time
+		if p.active.Load() {
 			if p.pcm.atEOF() && p.out.BufferedSize() == 0 {
 				close(p.done)
 				return
 			}
+			t.Reset(20 * time.Millisecond)
+			ticks = t.C
 		}
+		select {
+		case <-p.stop:
+			return
+		case <-p.wake:
+			t.Stop()
+		case <-ticks:
+		}
+	}
+}
+
+func (p *Player) playbackError() error {
+	if err := p.Err(); err != nil {
+		return err
+	}
+	if err := p.output.ctx.Err(); err != nil {
+		return fmt.Errorf("%w: %v", media.ErrDeviceLost, err)
+	}
+	if err := p.out.Err(); err != nil {
+		return fmt.Errorf("%w: %v", media.ErrFileRead, err)
+	}
+	return nil
+}
+
+func (p *Player) setError(err error) {
+	p.errMu.Lock()
+	p.err = err
+	p.errMu.Unlock()
+}
+
+func (p *Player) setActive(active bool) {
+	o := p.output
+	o.mu.Lock()
+	if p.active.Swap(active) != active {
+		var err error
+		if active {
+			o.active++
+			if o.active == 1 {
+				err = o.ctx.Resume()
+			}
+		} else {
+			o.active--
+			if o.active == 0 {
+				err = o.ctx.Suspend()
+			}
+		}
+		if err != nil {
+			p.setError(fmt.Errorf("%w: %v", media.ErrDeviceLost, err))
+		}
+	}
+	o.mu.Unlock()
+	select {
+	case p.wake <- struct{}{}:
+	default:
 	}
 }
 
@@ -167,11 +262,19 @@ func (p *Player) Done() <-chan struct{} { return p.done }
 // Info returns information about the song.
 func (p *Player) Info() media.SongInfo { return p.info }
 
+func (p *Player) Seekable() bool { return p.seekable }
+
 // Start starts (or resumes) playback.
-func (p *Player) Start() { p.out.Play() }
+func (p *Player) Start() {
+	p.out.Play()
+	p.setActive(true)
+}
 
 // Pause pauses playback.
-func (p *Player) Pause() { p.out.Pause() }
+func (p *Player) Pause() {
+	p.out.Pause()
+	p.setActive(false)
+}
 
 // Elapsed returns the playing time in seconds, excluding audio that is
 // decoded but still waiting in oto's buffer.
@@ -186,7 +289,7 @@ func (p *Player) Seek(delta int) error {
 	if !p.seekable {
 		return errNotSeekable
 	}
-	return p.seekTo(p.pcm.position() + delta*p.rate)
+	return p.seekTo((p.Elapsed() + delta) * p.rate)
 }
 
 // SeekFromEnd jumps to secs seconds before the end of the song.
@@ -208,9 +311,12 @@ func (p *Player) seekTo(pos int) error {
 	return err
 }
 
-// Err returns the decoding error that ended playback, if any. It is only
-// meaningful after Stop.
-func (p *Player) Err() error { return p.err }
+// Err reports output or decoding errors; Stop collects the final decoder error.
+func (p *Player) Err() error {
+	p.errMu.Lock()
+	defer p.errMu.Unlock()
+	return p.err
+}
 
 // Stop ends playback and releases the decoder. Pending network reads are
 // aborted first, so stopping a stalled stream doesn't block.
@@ -221,13 +327,18 @@ func (p *Player) Stop() {
 		if p.cancel != nil {
 			p.cancel()
 		}
+		<-p.watched
+		if !finished && p.cancel != nil && !errors.Is(p.Err(), media.ErrDeviceLost) {
+			p.setError(nil)
+		}
 		p.out.PauseAndStopReading()
+		p.setActive(false)
 		p.pcm.close()
 		// Aborting a stream that is still playing makes its decoder fail;
 		// that error is ours, not the stream's.
 		if finished || p.cancel == nil {
 			if err := p.pcm.src.Err(); err != nil {
-				p.err = fmt.Errorf("%w (%v)", media.ErrFileRead, err)
+				p.setError(errors.Join(p.Err(), fmt.Errorf("%w (%v)", media.ErrFileRead, err)))
 			}
 		}
 	})

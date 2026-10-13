@@ -41,11 +41,12 @@ func TestSampleConfig(t *testing.T) {
 	}
 	if o.Mouse != def.Mouse || o.ListWidth != def.ListWidth || o.PanSize != def.PanSize || o.SkipSeconds != def.SkipSeconds ||
 		o.Downsample != def.Downsample || o.HideOthers != def.HideOthers || o.ID3Names != def.ID3Names || o.GuessLegacyTags != def.GuessLegacyTags || o.MetadataCache != def.MetadataCache || o.ScanMP3 != def.ScanMP3 ||
+		o.UseTrash != def.UseTrash || o.PauseOnSleep != def.PauseOnSleep || o.PauseOnOutputChange != def.PauseOnOutputChange ||
 		o.SelectUnselectFirst != def.SelectUnselectFirst || o.SelectRegex != def.SelectRegex ||
 		o.SelectCaseInsensitive != def.SelectCaseInsensitive || o.SaveState != def.SaveState {
 		t.Errorf("sample values differ from the defaults: %+v", o)
 	}
-	if len(o.Colours) != 18 || len(o.Keys) != 24 {
+	if len(o.Colours) != 18 || len(o.Keys) != 25 {
 		t.Errorf("colours %d, keys %d", len(o.Colours), len(o.Keys))
 	}
 }

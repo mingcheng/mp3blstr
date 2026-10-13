@@ -7,6 +7,7 @@ package main
 
 import (
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -21,6 +22,7 @@ import (
 	"github.com/mingcheng/mp3blstr/internal/keys"
 	"github.com/mingcheng/mp3blstr/internal/media"
 	"github.com/mingcheng/mp3blstr/internal/mediakeys"
+	"github.com/mingcheng/mp3blstr/internal/playback"
 	"github.com/mingcheng/mp3blstr/internal/ui"
 	"github.com/mingcheng/mp3blstr/internal/ui/theme"
 )
@@ -113,26 +115,50 @@ func run(args []string) int {
 	})
 	u.Attach(a)
 	if opts.MediaKeys {
-		controls, err := mediakeys.Start(func(action mediakeys.Action) {
-			u.Post(func() { handleMediaAction(a.Player, action) })
-		})
+		controls, err := mediakeys.Start(func(command mediakeys.Command) {
+			u.Post(func() {
+				if err := handleMediaCommand(a.Player, command); err != nil {
+					logger.Warn("media command rejected", "err", err)
+					a.Warning(err.Error())
+				}
+			})
+		}, func(err error) { logger.Warn("Now Playing artwork unavailable", "err", err) })
 		if err != nil {
 			logger.Warn("media keys unavailable", "err", err)
+			a.Warning(fmt.Sprintf("System media controls unavailable: %v", err))
 		} else {
 			defer controls.Close()
 			a.OnPlaybackChange = func() {
-				status := "Stopped"
-				if a.Player.Playing() {
-					status = "Playing"
-					if a.Player.Paused() {
-						status = "Paused"
-					}
-				}
-				controls.Update(status)
+				controls.Update(playbackSnapshot(a.Player))
 			}
 		}
 	}
 	start(a, cli, persist)
+	if mediakeys.SupportsInterruptions && (opts.PauseOnSleep || opts.PauseOnOutputChange) {
+		monitor, err := mediakeys.WatchInterruptions(opts.PauseOnSleep, opts.PauseOnOutputChange, func(event mediakeys.Interruption) {
+			u.Post(func() {
+				if !a.Player.Playing() {
+					return
+				}
+				a.Player.Pause()
+				message := "Paused before system sleep; press Play to continue."
+				if event == mediakeys.OutputChanged {
+					message = "Audio output changed; press Play to continue."
+				}
+				a.SetMessage(message)
+			})
+		})
+		if err != nil {
+			logger.Warn("system interruption monitoring unavailable", "err", err)
+			a.Warning(fmt.Sprintf("Sleep/output auto-pause unavailable: %v", err))
+		} else {
+			defer func() {
+				if err := monitor.Close(); err != nil {
+					logger.Warn("closing system interruption monitor", "err", err)
+				}
+			}()
+		}
+	}
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGHUP)
@@ -155,15 +181,20 @@ func run(args []string) int {
 
 type mediaPlayer interface {
 	Play()
+	Pause()
 	Playing() bool
 	Paused() bool
 	Next()
 	Previous()
 	Stop()
+	TrackID() int
+	CanSeek() bool
+	SongInfo() (string, media.SongInfo, bool)
+	SeekTo(int)
 }
 
-func handleMediaAction(p mediaPlayer, action mediakeys.Action) {
-	switch action {
+func handleMediaCommand(p mediaPlayer, command mediakeys.Command) error {
+	switch command.Action {
 	case mediakeys.PlayPause:
 		p.Play()
 	case mediakeys.Play:
@@ -171,16 +202,43 @@ func handleMediaAction(p mediaPlayer, action mediakeys.Action) {
 			p.Play()
 		}
 	case mediakeys.Pause:
-		if p.Playing() && !p.Paused() {
-			p.Play()
-		}
+		p.Pause()
 	case mediakeys.Next:
 		p.Next()
 	case mediakeys.Previous:
 		p.Previous()
 	case mediakeys.Stop:
 		p.Stop()
+	case mediakeys.Seek:
+		if command.TrackID != p.TrackID() || !p.CanSeek() {
+			return errors.New("Cannot seek: the track changed or is not seekable.")
+		}
+		_, info, _ := p.SongInfo()
+		seconds, err := mediakeys.SeekSeconds(command.Position, info.TotalSeconds)
+		if err != nil {
+			return err
+		}
+		p.SeekTo(seconds)
 	}
+	return nil
+}
+
+func playbackSnapshot(p *playback.Controller) mediakeys.Snapshot {
+	path, info, _ := p.SongInfo()
+	if info.Title == "" && path != "" {
+		info.Title = media.ChopPath(path)
+	}
+	s := mediakeys.Snapshot{
+		Status: "Stopped", Path: path, Title: info.Title, Artist: info.Artist, Album: info.Album,
+		Duration: info.TotalSeconds, Revision: p.Revision(), TrackID: p.TrackID(), CanSeek: p.CanSeek(),
+	}
+	if p.HasSong() {
+		s.Status, s.Position = "Playing", p.Elapsed()
+		if p.Paused() {
+			s.Status = "Paused"
+		}
+	}
+	return s
 }
 
 // usage prints err (if any) and the help text, and returns the exit code.

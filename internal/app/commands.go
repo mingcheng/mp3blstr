@@ -145,6 +145,10 @@ func (a *App) Exec(cmd keys.Command) {
 		}
 	case keys.CmdSelectFiles:
 		a.fmBegin()
+	case keys.CmdAddPaths:
+		if a.Mode != keys.ModeHelp {
+			a.openPopup([]string{"Audio paths (quote spaces or drag files here):"}, "", 32768, a.addPaths)
+		}
 	case keys.CmdAddGroup:
 		p.QuitAfterPlaylist = false
 		a.Cur.AddGroup(playlist.NewGroup(defaultGroupTitle))

@@ -120,6 +120,12 @@ func (s *Screen) InputHandler() func(event *tcell.EventKey, setFocus func(p tvie
 	})
 }
 
+func (s *Screen) PasteHandler() func(string, func(tview.Primitive)) {
+	return s.WrapPasteHandler(func(text string, _ func(tview.Primitive)) {
+		s.app.HandlePaste(text)
+	})
+}
+
 // MouseHandler dispatches mouse events to the areas registered while
 // drawing (topmost first).
 func (s *Screen) MouseHandler() func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(p tview.Primitive)) (bool, tview.Primitive) {
