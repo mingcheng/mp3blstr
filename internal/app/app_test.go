@@ -141,14 +141,14 @@ func TestGroupsTitlesAndPlaylistRoundTrip(t *testing.T) {
 		t.Fatal("[..] should go back")
 	}
 	press(a, tcell.KeyF4, "saved", tcell.KeyEnter)
-	if _, err := os.Stat(filepath.Join(dir, "saved.lst")); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, "saved.m3u")); err != nil {
 		t.Fatal("playlist not written")
 	}
 	press(a, 'C')
 	if a.Root.Len() != 0 {
 		t.Fatal("clear playlist")
 	}
-	if !a.LoadPlaylist(filepath.Join(dir, "saved.lst")) || a.Root.Len() != 1 || a.Root.SubGroup(0).Len() != 3 {
+	if !a.LoadPlaylist(filepath.Join(dir, "saved.m3u")) || a.Root.Len() != 1 || a.Root.SubGroup(0).Len() != 3 {
 		t.Fatal("reload failed")
 	}
 }

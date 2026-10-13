@@ -2,6 +2,8 @@ package playlist
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -146,6 +148,50 @@ func TestWriteParseRoundTrip(t *testing.T) {
 	}
 	if loaded.Item(1).Path != "/music/y.mp3" {
 		t.Fatal("song after group lost")
+	}
+}
+
+func TestSaveLoadM3U(t *testing.T) {
+	root := NewGroup("[Default]")
+	album := NewGroup("[Album]")
+	disc := NewGroup("[Disc 1]")
+	album.AddGroup(disc)
+	disc.AddSong("/music/a b.mp3")
+	album.AddSong("/music/c.mp3")
+	root.AddGroup(album)
+	root.AddSong("http://h/stream")
+
+	path := filepath.Join(t.TempDir(), "list.m3u")
+	if err := SaveM3U(path, root); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(path)
+	if !strings.HasPrefix(string(data), "#EXTM3U\n") || !strings.Contains(string(data), `group-title="Album/Disc 1", a b`+"\n/music/a b.mp3\n") {
+		t.Fatalf("unexpected m3u:\n%s", data)
+	}
+
+	loaded := NewGroup("[Default]")
+	if _, err := Load(path, loaded); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(names(loaded), ","); got != "[Album],http://h/stream" {
+		t.Fatalf("root: %s", got)
+	}
+	a := loaded.SubGroup(0)
+	if got := strings.Join(names(a), ","); got != "[..],[Disc 1],/music/c.mp3" {
+		t.Fatalf("album: %s", got)
+	}
+	if got := strings.Join(names(a.SubGroup(1)), ","); got != "[..],/music/a b.mp3" {
+		t.Fatalf("disc: %s", got)
+	}
+}
+
+func TestLoadPlainM3UFallback(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "plain.m3u")
+	os.WriteFile(path, []byte("#EXTM3U\n#EXTINF:1,x\nsong.mp3\nother.mp3\n"), 0o644)
+	g := NewGroup("[d]")
+	if _, err := Load(path, g); err != nil || g.Len() != 2 {
+		t.Fatalf("got %v, %v", names(g), err)
 	}
 }
 

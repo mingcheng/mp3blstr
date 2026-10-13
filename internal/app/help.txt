@@ -75,8 +75,9 @@ LOAD/ADD PLAYLIST
   contents to the current group.
 
 WRITE PLAYLIST
-  Save the complete playlist, including all groups, in the
-  playlist directory.
+  Save the complete playlist as an M3U file in the playlist
+  directory (by default your Music folder). Groups are kept
+  as group-title tags.
 
 CLEAR PLAYLIST
   Remove all entries from the playlist (without asking!).

@@ -149,7 +149,7 @@ func (a *App) Exec(cmd keys.Command) {
 			"Playlist will be saved in: ",
 			a.Opts.PlaylistDir,
 			"(Default dir setting: files.playlist_dir)",
-			"Example filename: myplaylist.lst",
+			"Example filename: myplaylist.m3u",
 		}, "", 40, a.writePlaylist)
 	case keys.CmdLoadPlaylist:
 		if a.Mode == keys.ModeNormal {

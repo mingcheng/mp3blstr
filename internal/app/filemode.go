@@ -242,24 +242,25 @@ func (a *App) AddFiles(files []string) {
 	}
 }
 
-// writePlaylist saves the whole playlist as name in the playlist directory.
+// writePlaylist saves the whole playlist as an M3U file name in the playlist
+// directory, which is created when missing.
 func (a *App) writePlaylist(name string) {
 	if name == "" {
 		return
 	}
-	if !a.Matcher.IsPlaylist(name) {
-		name += ".lst"
+	if !playlist.IsM3U(name) {
+		name += ".m3u"
 	}
 	name = media.ChopPath(name)
 	if name == "" {
 		return
 	}
 	dir := media.ExpandPath(a.Opts.PlaylistDir)
-	if st, err := os.Stat(dir); err != nil || !st.IsDir() {
-		a.Warning("Failed to change to playlist dir.")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		a.Warning("Failed to create playlist dir.")
 		return
 	}
-	if err := playlist.Save(filepath.Join(dir, name), a.Root, a.Player.Mode.String()); err != nil {
+	if err := playlist.SaveM3U(filepath.Join(dir, name), a.Root); err != nil {
 		a.Warning("Failed to write playlist.")
 		return
 	}

@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/adrg/xdg"
+
 	"github.com/mingcheng/mp3blasterr/internal/filemanager"
 	"github.com/mingcheng/mp3blasterr/internal/keys"
 	"github.com/mingcheng/mp3blasterr/internal/listview"
@@ -96,7 +98,7 @@ func Default() *Options {
 		DisplayMode:           playlist.DisplayFileName,
 		FileDisplayMode:       filemanager.DisplaySize,
 		Threads:               100,
-		PlaylistDir:           media.HomeDir(),
+		PlaylistDir:           defaultPlaylistDir(),
 		MetadataCache:         true,
 		SelectCaseInsensitive: true,
 		Wrap:                  true,
@@ -108,6 +110,15 @@ func Default() *Options {
 		Volume:                100,
 		Balance:               50,
 	}
+}
+
+// defaultPlaylistDir returns the user's music folder (XDG_MUSIC_DIR, ~/Music
+// on macOS, the Music known folder on Windows), or the home directory.
+func defaultPlaylistDir() string {
+	if d := xdg.UserDirs.Music; d != "" {
+		return d
+	}
+	return media.HomeDir()
 }
 
 // Themes lists the built-in colour themes in switching order.

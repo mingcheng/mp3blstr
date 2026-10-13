@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/jamesnetherton/m3u"
+
 	"github.com/mingcheng/mp3blasterr/internal/atomicfile"
 	"github.com/mingcheng/mp3blasterr/internal/media"
 )
@@ -35,9 +37,69 @@ func Load(path string, g *Group) (GlobalSettings, error) {
 	if abs, err := filepath.Abs(base); err == nil {
 		base = abs
 	}
-	ext := filepath.Ext(path)
-	isM3U := strings.EqualFold(ext, ".m3u") || strings.EqualFold(ext, ".m3u8")
+	isM3U := IsM3U(path)
+	if isM3U {
+		// The extended M3U parser keeps group-title tags but silently skips
+		// entries without #EXTINF, so it is only trusted when it found every song.
+		if pl, err := m3u.Parse(path); err == nil {
+			probe := NewGroup("")
+			if _, err := Parse(f, probe, base, true); err == nil && probe.UnplayedSongs(true) == len(pl.Tracks) {
+				addTracks(g, pl.Tracks, base)
+				return GlobalSettings{}, nil
+			}
+			if _, err := f.Seek(0, io.SeekStart); err != nil {
+				return GlobalSettings{}, err
+			}
+		}
+	}
 	return Parse(f, g, base, isM3U)
+}
+
+// IsM3U reports whether path has an M3U playlist extension.
+func IsM3U(path string) bool {
+	ext := filepath.Ext(path)
+	return strings.EqualFold(ext, ".m3u") || strings.EqualFold(ext, ".m3u8")
+}
+
+// m3uGroupTag is the #EXTINF attribute naming the group of a song; nested
+// groups are separated by m3uGroupSep.
+const (
+	m3uGroupTag = "group-title"
+	m3uGroupSep = "/"
+)
+
+// addTracks adds M3U tracks to g, recreating the groups named by their
+// group-title tags.
+func addTracks(g *Group, tracks []m3u.Track, base string) {
+	groups := map[string]*Group{"": g}
+	for _, t := range tracks {
+		dst := g
+		for _, tag := range t.Tags {
+			if strings.EqualFold(tag.Name, m3uGroupTag) {
+				dst = ensureGroup(groups, tag.Value)
+			}
+		}
+		dst.AddSong(resolve(strings.TrimSpace(t.URI), base))
+	}
+}
+
+// ensureGroup returns the group for the group-title path, creating it and
+// its parents on first use.
+func ensureGroup(groups map[string]*Group, path string) *Group {
+	if g, ok := groups[path]; ok {
+		return g
+	}
+	parent, name := "", path
+	if i := strings.LastIndex(path, m3uGroupSep); i >= 0 {
+		parent, name = path[:i], path[i+1:]
+	}
+	if r := []rune(name); len(r) > maxGroupNameLen {
+		name = string(r[:maxGroupNameLen])
+	}
+	ng := NewGroup("[" + name + "]")
+	ensureGroup(groups, parent).AddGroup(ng)
+	groups[path] = ng
+	return ng
 }
 
 // Parse reads playlist data from r into g. Besides song paths (one per
@@ -115,6 +177,47 @@ func Save(path string, root *Group, playMode string) error {
 		return err
 	}
 	return atomicfile.Write(path, b.Bytes(), 0o644)
+}
+
+// SaveM3U writes the songs of root (recursively) to path as an extended M3U
+// playlist. Songs in sub groups carry a group-title tag naming their group.
+// The file is replaced atomically.
+func SaveM3U(path string, root *Group) error {
+	var pl m3u.Playlist
+	collectTracks(&pl, root, "")
+	r, err := m3u.Marshall(pl)
+	if err != nil {
+		return err
+	}
+	b, err := io.ReadAll(r)
+	if err != nil {
+		return err
+	}
+	return atomicfile.Write(path, b, 0o644)
+}
+
+// collectTracks appends the songs of g to pl; group is the group-title of g.
+func collectTracks(pl *m3u.Playlist, g *Group, group string) {
+	for _, it := range g.Items {
+		switch it.Kind {
+		case KindGroup:
+			name := strings.TrimSuffix(strings.TrimPrefix(it.Group.Title, "["), "]")
+			if group != "" {
+				name = group + m3uGroupSep + name
+			}
+			collectTracks(pl, it.Group, name)
+		case KindSong:
+			name := media.ChopPath(it.Path)
+			if !media.IsHTTPStream(it.Path) {
+				name = strings.TrimSuffix(name, filepath.Ext(name))
+			}
+			t := m3u.Track{Name: name, Length: -1, URI: it.Path}
+			if group != "" {
+				t.Tags = []m3u.Tag{{Name: m3uGroupTag, Value: group}}
+			}
+			pl.Tracks = append(pl.Tracks, t)
+		}
+	}
 }
 
 // Write serialises root to w. playMode is stored in the <GLOBAL> tag.

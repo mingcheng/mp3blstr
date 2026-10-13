@@ -61,9 +61,9 @@ files:
   # metadata_cache: true     # cache ID3 names and durations under ~/.config/mp3blasterr/cache;
   #                          # false disables persistent metadata caching
   # scan_mp3: false
-  # playlist_dir: ~/playlists  # default: your home directory
+  # playlist_dir: ~/Music      # default: your Music folder (XDG_MUSIC_DIR); playlists are saved there as .m3u
   # audio_patterns: ['\.mp[123]$', '\.wav$', '\.ogg$', '\.oga$', '\.flac$', '^https?://']
-  # playlist_patterns: ['\.lst$', '\.m3u$']
+  # playlist_patterns: ['\.lst$', '\.m3u$', '\.m3u8$']
   # charset_table: /path/to/win2koi.tbl
 
 selection:                   # select/deselect items by pattern (+ and -)

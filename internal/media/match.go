@@ -14,7 +14,7 @@ import (
 var DefaultAudioPatterns = []string{`\.mp[123]$`, `\.wav$`, `\.ogg$`, `\.oga$`, `\.flac$`, `^https?://`}
 
 // DefaultPlaylistPatterns are used when PlaylistMatching isn't configured.
-var DefaultPlaylistPatterns = []string{`\.lst$`, `\.m3u$`}
+var DefaultPlaylistPatterns = []string{`\.lst$`, `\.m3u$`, `\.m3u8$`}
 
 // Matcher decides which files are audio files and which are playlists.
 type Matcher struct {
