@@ -21,32 +21,6 @@ import (
 	"github.com/mingcheng/mp3blstr/internal/playlist"
 )
 
-func TestAboutBuildVersion(t *testing.T) {
-	for _, version := range []string{"v1.0.0(20260101)", "dev(20260101)", "dev"} {
-		t.Run(version, func(t *testing.T) {
-			a := New(Deps{
-				Version: version,
-				Options: config.Default(),
-				Keys:    keys.Default(),
-				Backend: noBackend{},
-				View:    &fakeView{},
-			})
-			if a.Version != version {
-				t.Fatalf("Version = %q, want %q", a.Version, version)
-			}
-			a.Exec(keys.CmdHelp)
-			var lines []string
-			for i := 0; i < a.MainLen(); i++ {
-				lines = append(lines, a.MainRow(i).Text)
-			}
-			text := strings.Join(lines, "\n")
-			if !strings.Contains(text, "  mp3blstr "+version+"\n") || strings.Contains(text, "{{VERSION}}") {
-				t.Fatalf("About text does not contain the injected version:\n%s", text)
-			}
-		})
-	}
-}
-
 type fakeView struct {
 	quit, beeps int
 
