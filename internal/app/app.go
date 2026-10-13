@@ -99,12 +99,13 @@ const helpBarRows = 4
 
 // App is the application state.
 type App struct {
-	Opts      *config.Options
-	Keys      *keys.Table
-	Matcher   *media.Matcher
-	Mixer     *audio.Mixer // nil when the mixer is disabled
-	fadeMixer *audio.Mixer // audio gain control also present with --no-mixer
-	Player    *playback.Controller
+	Opts             *config.Options
+	Keys             *keys.Table
+	Matcher          *media.Matcher
+	Mixer            *audio.Mixer // nil when the mixer is disabled
+	fadeMixer        *audio.Mixer // audio gain control also present with --no-mixer
+	Player           *playback.Controller
+	OnPlaybackChange func()
 
 	Root *playlist.Group
 	Cur  *playlist.Group
@@ -235,6 +236,9 @@ func (l *listener) SongStarted(info media.SongInfo) {
 
 // playerChanged rewrites the status file when the state it shows changed.
 func (a *App) playerChanged() {
+	if a.OnPlaybackChange != nil {
+		a.OnPlaybackChange()
+	}
 	if a.statusFile == "" {
 		return
 	}

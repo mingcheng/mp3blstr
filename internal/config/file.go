@@ -129,6 +129,7 @@ func keywords(o *Options) map[string]keyword {
 		"ui.pan_size":     numberKw(&o.PanSize, func(n int) bool { return n >= 1 && n <= 40 }),
 
 		"playback.play_mode":    parsedKw(&o.PlayMode, playback.ParsePlayMode),
+		"playback.media_keys":   boolKw(&o.MediaKeys),
 		"playback.repeat":       boolKw(&o.Repeat),
 		"playback.fade_out":     boolKw(&o.FadeOut),
 		"playback.fade_seconds": numberKw(&o.FadeSeconds, nonNegative),

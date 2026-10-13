@@ -20,6 +20,7 @@ import (
 	"github.com/mingcheng/mp3blasterr/internal/config"
 	"github.com/mingcheng/mp3blasterr/internal/keys"
 	"github.com/mingcheng/mp3blasterr/internal/media"
+	"github.com/mingcheng/mp3blasterr/internal/mediakeys"
 	"github.com/mingcheng/mp3blasterr/internal/ui"
 	"github.com/mingcheng/mp3blasterr/internal/ui/theme"
 )
@@ -108,6 +109,26 @@ func run(args []string) int {
 		Logger:     logger,
 	})
 	u.Attach(a)
+	if opts.MediaKeys {
+		controls, err := mediakeys.Start(func(action mediakeys.Action) {
+			u.Post(func() { handleMediaAction(a.Player, action) })
+		})
+		if err != nil {
+			logger.Warn("media keys unavailable", "err", err)
+		} else {
+			defer controls.Close()
+			a.OnPlaybackChange = func() {
+				status := "Stopped"
+				if a.Player.Playing() {
+					status = "Playing"
+					if a.Player.Paused() {
+						status = "Paused"
+					}
+				}
+				controls.Update(status)
+			}
+		}
+	}
 	start(a, cli, persist)
 
 	sigs := make(chan os.Signal, 1)
@@ -127,6 +148,36 @@ func run(args []string) int {
 		return fail(err)
 	}
 	return exitOK
+}
+
+type mediaPlayer interface {
+	Play()
+	Playing() bool
+	Paused() bool
+	Next()
+	Previous()
+	Stop()
+}
+
+func handleMediaAction(p mediaPlayer, action mediakeys.Action) {
+	switch action {
+	case mediakeys.PlayPause:
+		p.Play()
+	case mediakeys.Play:
+		if !p.Playing() || p.Paused() {
+			p.Play()
+		}
+	case mediakeys.Pause:
+		if p.Playing() && !p.Paused() {
+			p.Play()
+		}
+	case mediakeys.Next:
+		p.Next()
+	case mediakeys.Previous:
+		p.Previous()
+	case mediakeys.Stop:
+		p.Stop()
+	}
 }
 
 // usage prints err (if any) and the help text, and returns the exit code.

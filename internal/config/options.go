@@ -34,6 +34,7 @@ type Options struct {
 	SortMode        filemanager.SortMode
 	HideOthers      bool
 	PlayMode        playback.PlayMode
+	MediaKeys       bool
 	Repeat          bool
 	FadeOut         bool
 	FadeSeconds     int // seconds of end-of-track fade, set in config only
@@ -88,6 +89,7 @@ func Default() *Options {
 		FPL:                   5,
 		SortMode:              filemanager.SortAlpha,
 		PlayMode:              playback.PlayGroups,
+		MediaKeys:             true,
 		FadeSeconds:           5,
 		SkipSeconds:           10,
 		PanSize:               5,

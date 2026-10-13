@@ -84,6 +84,22 @@ func TestParseEmptyConfig(t *testing.T) {
 	}
 }
 
+func TestMediaKeysConfig(t *testing.T) {
+	if !Default().MediaKeys {
+		t.Fatal("media keys should be enabled by default")
+	}
+	o := Default()
+	if err := o.Parse(strings.NewReader("playback: {media_keys: false}")); err != nil || o.MediaKeys {
+		t.Fatalf("disable media keys: enabled=%v err=%v", o.MediaKeys, err)
+	}
+	if err := o.Parse(strings.NewReader("playback: {media_keys: true}")); err != nil || !o.MediaKeys {
+		t.Fatalf("enable media keys: enabled=%v err=%v", o.MediaKeys, err)
+	}
+	if err := o.Parse(strings.NewReader("playback: {media_keys: invalid}")); err == nil {
+		t.Fatal("invalid media_keys must fail")
+	}
+}
+
 func TestParseConfigErrors(t *testing.T) {
 	for _, in := range []string{
 		"playback: {threads: 33}",
