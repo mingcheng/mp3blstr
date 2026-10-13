@@ -60,8 +60,8 @@ files:
   # use_trash: false         # macOS: confirmed file deletion uses the system Trash;
   #                          # failure never falls back to permanent deletion
   # id3_names: false         # legacy default for file manager ID3 display
-  # guess_legacy_tags: false # guess mislabeled UTF-8/GBK/GB18030 ID3 text;
-  #                          # opt in: detection costs time on large lists
+  # guess_legacy_tags: true  # recover mislabeled UTF-8/GBK/GB18030 ID3 text;
+  #                          # false preserves the declared tag encoding
   # metadata_cache: true     # cache ID3 names and durations under ~/.config/mp3blstr/cache;
   #                          # false disables persistent metadata caching
   # scan_mp3: false

@@ -105,6 +105,7 @@ func Default() *Options {
 		FileDisplayMode:       filemanager.DisplaySize,
 		Threads:               100,
 		PlaylistDir:           defaultPlaylistDir(),
+		GuessLegacyTags:       true,
 		MetadataCache:         true,
 		SelectCaseInsensitive: true,
 		Wrap:                  true,

@@ -1,7 +1,9 @@
 package config
 
 import (
+	"encoding/binary"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -103,5 +105,65 @@ func TestMetadataCacheSetting(t *testing.T) {
 	}
 	if o.MetadataCache {
 		t.Fatal("metadata cache should be disabled by configuration")
+	}
+}
+
+func TestLegacyTagSetting(t *testing.T) {
+	opts := Default()
+	if !opts.GuessLegacyTags {
+		t.Fatal("legacy tag decoding should be enabled by default")
+	}
+	if err := opts.Parse(strings.NewReader("files:\n  guess_legacy_tags: false\n")); err != nil {
+		t.Fatal(err)
+	}
+	if opts.GuessLegacyTags {
+		t.Fatal("legacy tag decoding should be disabled by configuration")
+	}
+}
+
+func TestDefaultLegacyID3Decoding(t *testing.T) {
+	media.SetGuessLegacyTags(Default().GuessLegacyTags)
+	t.Cleanup(func() { media.SetGuessLegacyTags(false) })
+	raw := "\xd5\xbe\xb3\xa4\xcb\xd8\xb2\xc4(sc.chinaz.com)"
+	wantText := "\u7ad9\u957f\u7d20\u6750(sc.chinaz.com)"
+	want := media.Tags{
+		Artist: wantText, Title: wantText, Album: wantText,
+		Comment: wantText, Year: "2021",
+	}
+	var frames []byte
+	for _, frame := range []struct{ id, text string }{
+		{"TPE1", "\x00" + raw}, {"TIT2", "\x00" + raw},
+		{"TALB", "\x00" + raw}, {"COMM", "\x00chi\x00" + raw},
+		{"TYER", "\x002021"},
+	} {
+		header := make([]byte, 10)
+		copy(header, frame.id)
+		binary.BigEndian.PutUint32(header[4:8], uint32(len(frame.text)))
+		frames = append(frames, header...)
+		frames = append(frames, frame.text...)
+	}
+	header := []byte{'I', 'D', '3', 3, 0, 0, 0, 0, 0, 0}
+	for index, size := 9, len(frames); index >= 6; index, size = index-1, size>>7 {
+		header[index] = byte(size & 0x7f)
+	}
+	generated := filepath.Join(t.TempDir(), "legacy.mp3")
+	if err := os.WriteFile(generated, append(header, frames...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, sample := range []struct{ name, path string }{
+		{"generated", generated}, {"local-mp3", "../../15134.mp3"},
+	} {
+		t.Run(sample.name, func(t *testing.T) {
+			if _, err := os.Stat(sample.path); os.IsNotExist(err) {
+				t.Skip("local MP3 sample is not available")
+			}
+			name := "[ID3] " + wantText + " - " + wantText
+			if got := media.ID3Name(sample.path, "fallback"); got != name {
+				t.Fatalf("list name = %q, want %q", got, name)
+			}
+			if got, err := media.ReadTags(sample.path); err != nil || got != want {
+				t.Fatalf("detail tags = %+v, %v; want %+v", got, err, want)
+			}
+		})
 	}
 }
