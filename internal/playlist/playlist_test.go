@@ -31,6 +31,37 @@ func TestAddGroupKeepsGroupsFirst(t *testing.T) {
 	}
 }
 
+func TestRemoveDuplicates(t *testing.T) {
+	root := NewGroup("[Default]")
+	first := NewGroup("[First]")
+	second := NewGroup("[Second]")
+	root.AddGroup(first)
+	root.AddGroup(second)
+	first.AddSong("/music/a.mp3")
+	first.AddSong("https://example.com/live")
+	first.AddSong("/music/a.mp3")
+	second.AddSong("/music/a.mp3")
+	second.AddSong("/music/b.mp3")
+	root.AddSong("/music/b.mp3")
+	root.AddSong("/music/c.mp3")
+	first.Select(1)
+	if got := root.RemoveDuplicates(); got != 3 {
+		t.Fatalf("removed %d songs, want 3", got)
+	}
+	if got := strings.Join(names(first), ","); got != "[..],/music/a.mp3,https://example.com/live" {
+		t.Fatalf("first group: %s", got)
+	}
+	if got := strings.Join(names(second), ","); got != "[..],/music/b.mp3" {
+		t.Fatalf("second group: %s", got)
+	}
+	if got := strings.Join(names(root), ","); got != "[First],[Second],/music/c.mp3" {
+		t.Fatalf("root: %s", got)
+	}
+	if !first.Item(1).Selected() || root.RemoveDuplicates() != 0 {
+		t.Fatal("retained selection or idempotence lost")
+	}
+}
+
 func TestMoveSelected(t *testing.T) {
 	g := NewGroup("[x]")
 	for _, s := range []string{"a", "b", "c", "d", "e"} {

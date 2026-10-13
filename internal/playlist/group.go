@@ -144,6 +144,34 @@ func (g *Group) Clear() {
 	g.selectID = 1
 }
 
+// RemoveDuplicates keeps the first occurrence of each song path across
+// this group and its descendants, leaving groups and parent links intact.
+func (g *Group) RemoveDuplicates() int {
+	seen := make(map[string]bool)
+	var remove func(*Group) int
+	remove = func(group *Group) int {
+		kept := group.Items[:0]
+		removed := 0
+		for _, it := range group.Items {
+			switch it.Kind {
+			case KindGroup:
+				removed += remove(it.Group)
+			case KindSong:
+				if seen[it.Path] {
+					removed++
+					continue
+				}
+				seen[it.Path] = true
+			}
+			kept = append(kept, it)
+		}
+		clear(group.Items[len(kept):])
+		group.Items = kept
+		return removed
+	}
+	return remove(g)
+}
+
 // --- selection -----------------------------------------------------------
 
 // ToggleSelect marks or unmarks entry i.

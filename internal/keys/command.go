@@ -71,6 +71,7 @@ const (
 	CmdRight
 	CmdToggleTheme
 	CmdToggleNerdFont
+	CmdRemoveDuplicates
 )
 
 // Mode is a bit mask of program modes, so a binding can be valid in several.
@@ -140,6 +141,7 @@ var configNames = map[string]Command{
 	"key.helpprev":             CmdHelpPrev,
 	"key.helpnext":             CmdHelpNext,
 	"key.clearplaylist":        CmdClearPlaylist,
+	"key.removeduplicates":     CmdRemoveDuplicates,
 	"key.file.delete":          CmdFileDelete,
 	"key.play.skipend":         CmdPlaySkipEnd,
 	"key.play.nextgroup":       CmdPlayNextGroup,

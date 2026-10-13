@@ -1,6 +1,8 @@
 package app
 
 import (
+	"fmt"
+
 	"github.com/gdamore/tcell/v2"
 
 	"github.com/mingcheng/mp3blasterr/internal/config"
@@ -198,6 +200,20 @@ func (a *App) Exec(cmd keys.Command) {
 			p.ResetPlaylist()
 			p.ResetNextSong()
 		}
+	case keys.CmdRemoveDuplicates:
+		if a.Mode != keys.ModeNormal {
+			break
+		}
+		if p.Playing() {
+			a.Warning("Can't remove duplicates during playback.")
+			break
+		}
+		removed := a.Root.RemoveDuplicates()
+		a.MainView().Clamp(a.MainLen())
+		if removed > 0 {
+			p.ResetNextSong()
+		}
+		a.SetMessage(fmt.Sprintf("Removed %d duplicate files", removed))
 	case keys.CmdHelpPrev:
 		a.HelpBar.PageUp(len(a.HelpBarLines()))
 	case keys.CmdHelpNext:

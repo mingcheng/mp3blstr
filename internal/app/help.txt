@@ -82,6 +82,11 @@ CLEAR PLAYLIST
   Remove all entries from the playlist (without asking!).
   Only works when nothing is playing.
 
+REMOVE DUPLICATES
+  Remove repeated song paths across all playlist groups,
+  keeping the first occurrence. Only works when nothing is
+  playing. Press D in Normal Mode.
+
 MOVE FILES AFTER / MOVE FILES BEFORE
   Move the selected songs after (or before) the highlighted
   entry, in the order in which they were selected. Songs

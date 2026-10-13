@@ -201,6 +201,32 @@ func TestDisplayModesSavedOnToggle(t *testing.T) {
 	}
 }
 
+func TestRemoveDuplicateFilesCommand(t *testing.T) {
+	a, _ := newTestApp(t)
+	group := playlist.NewGroup("[Album]")
+	a.Root.AddGroup(group)
+	group.AddSong("/music/a.mp3")
+	a.AddFiles([]string{"/music/b.mp3", "/music/a.mp3", "/music/b.mp3"})
+	a.MainView().Set(3, a.MainLen())
+	press(a, 'D')
+	if group.Len() != 2 || a.Root.Len() != 2 || a.Root.Item(1).Path != "/music/b.mp3" {
+		t.Fatalf("duplicates not removed across groups: group=%d root=%d", group.Len(), a.Root.Len())
+	}
+	if a.MainView().Cursor >= a.MainLen() || a.Msg.Text != "Removed 2 duplicate files" {
+		t.Fatalf("cursor=%d message=%q", a.MainView().Cursor, a.Msg.Text)
+	}
+	press(a, 'D')
+	if a.Msg.Text != "Removed 0 duplicate files" {
+		t.Fatalf("second pass: %q", a.Msg.Text)
+	}
+	a.Root.AddSong("/music/a.mp3")
+	a.Player.Play()
+	press(a, 'D')
+	if a.Root.Len() != 3 || !a.Msg.Error {
+		t.Fatal("cannot remove duplicates during playback")
+	}
+}
+
 func TestPlaylistRowDetails(t *testing.T) {
 	a, dir := newTestApp(t)
 	path := filepath.Join(dir, "tone.wav")
@@ -364,10 +390,10 @@ func TestRepeatShuffleAndHelpBarCategories(t *testing.T) {
 	}
 
 	lines := a.HelpBarLines()
-	if lines[0][0].Desc != "Select Files" || lines[2][2].Desc != "Delete" || len(lines[2]) != 3 {
+	if lines[0][0].Desc != "Select Files" || lines[3][0].Desc != "Delete" || len(lines[3]) != 1 {
 		t.Fatal("each category should start on a new line")
 	}
-	if lines[3][0].Cmd != keys.CmdToggleRepeat || lines[3][1].Cmd != keys.CmdToggleShuffle {
+	if lines[4][0].Cmd != keys.CmdToggleRepeat || lines[4][1].Cmd != keys.CmdToggleShuffle {
 		t.Fatal("playback category should follow the playlist")
 	}
 

@@ -86,6 +86,7 @@ func Default() *Table {
 		entry{f(3), CmdLoadPlaylist, N, "Load/Add Playlist"},
 		entry{f(4), CmdWritePlaylist, N, "Write Playlist"},
 		entry{r('C'), CmdClearPlaylist, N, "Clear Playlist"},
+		entry{r('D'), CmdRemoveDuplicates, N, "Remove Duplicates"},
 		entry{r('m'), CmdMoveAfter, N, "Move Files After"},
 		entry{r('M'), CmdMoveBefore, N, "Move Files Before"},
 		entry{r('d'), CmdDel, N, "Delete"},
