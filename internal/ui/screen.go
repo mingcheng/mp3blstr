@@ -1,12 +1,19 @@
 package ui
 
 import (
+	"net/url"
+	"path/filepath"
+	"strings"
+	"unicode"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	"github.com/mingcheng/mp3blstr/internal/app"
 	"github.com/mingcheng/mp3blstr/internal/keys"
 	"github.com/mingcheng/mp3blstr/internal/listview"
+	"github.com/mingcheng/mp3blstr/internal/media"
+	"github.com/mingcheng/mp3blstr/internal/playback"
 	"github.com/mingcheng/mp3blstr/internal/ui/theme"
 )
 
@@ -32,6 +39,7 @@ type Screen struct {
 	width listview.Width
 	scr   tcell.Screen
 	hits  []hitArea
+	title string
 }
 
 func newScreen(th theme.Theme, gl theme.Glyphs, nerd bool, width listview.Width) *Screen {
@@ -86,6 +94,14 @@ func (s *Screen) syncLook() {
 // Draw renders the whole screen.
 func (s *Screen) Draw(scr tcell.Screen) {
 	s.syncLook()
+	if s.app != nil && s.app.Player != nil {
+		path, info, _ := s.app.Player.SongInfo()
+		title := terminalTitle(s.app.Player.Status(), path, info)
+		if s.scr != scr || s.title != title {
+			scr.SetTitle(title)
+			s.title = title
+		}
+	}
 	s.scr = scr
 	w, h := scr.Size()
 	s.SetRect(0, 0, w, h)
@@ -111,6 +127,56 @@ func (s *Screen) Draw(scr tcell.Screen) {
 	if !s.drawPopup(c, l) {
 		scr.HideCursor()
 	}
+}
+
+func terminalTitle(status playback.Status, path string, info media.SongInfo) string {
+	state := ""
+	switch status {
+	case playback.StatusPlay:
+		state = "Playing"
+	case playback.StatusPause:
+		state = "Paused"
+	case playback.StatusStop:
+		return "mp3blstr - Stopped"
+	default:
+		return "mp3blstr"
+	}
+	name := terminalText(info.Title)
+	if name == "" {
+		if source, err := url.Parse(path); err == nil && (source.Scheme == "http" || source.Scheme == "https") {
+			name = terminalText(filepath.Base(source.Path))
+			if source.Path == "" || strings.HasSuffix(source.Path, "/") {
+				name = terminalText(source.Hostname())
+			}
+		} else if path != "" {
+			name = terminalText(filepath.Base(path))
+		}
+	}
+	if artist := terminalText(info.Artist); artist != "" && name != "" {
+		name = artist + " - " + name
+	}
+	title := "mp3blstr - " + state
+	if name != "" {
+		title += " - " + name
+	}
+	runes := []rune(title)
+	if len(runes) > 256 {
+		title = string(runes[:253]) + "..."
+	}
+	return title
+}
+
+func terminalText(text string) string {
+	text = strings.Map(func(char rune) rune {
+		if unicode.IsSpace(char) {
+			return ' '
+		}
+		if unicode.IsControl(char) || unicode.Is(unicode.Cf, char) {
+			return -1
+		}
+		return char
+	}, text)
+	return strings.Join(strings.Fields(text), " ")
 }
 
 // InputHandler forwards key presses to the application.
