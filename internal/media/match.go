@@ -86,11 +86,11 @@ func (m *Matcher) AudioPaths(inputs []string) ([]string, error) {
 	for index, input := range inputs {
 		path := ExpandPath(input)
 		if strings.HasPrefix(strings.ToLower(path), "file:") {
-			uri, err := url.Parse(path)
-			if err != nil || (uri.Host != "" && uri.Host != "localhost") || uri.User != nil || uri.RawQuery != "" || uri.Fragment != "" || !filepath.IsAbs(uri.Path) {
+			var err error
+			path, err = localFileURIPath(path)
+			if err != nil || !filepath.IsAbs(path) {
 				return nil, fmt.Errorf("invalid local file URI: %s", input)
 			}
-			path = uri.Path
 		}
 		if !m.IsAudio(path) {
 			return nil, fmt.Errorf("not a supported audio file: %s", input)
@@ -117,6 +117,35 @@ func (m *Matcher) AudioPaths(inputs []string) ([]string, error) {
 		paths[index] = path
 	}
 	return paths, nil
+}
+
+func localFileURIPath(input string) (string, error) {
+	rest := input[len("file:"):]
+	if strings.HasPrefix(rest, "//") {
+		escapedPath := rest[2:]
+		if !strings.ContainsAny(escapedPath, "?#") {
+			path, err := url.PathUnescape(escapedPath)
+			if err == nil && isWindowsDrivePath(path) {
+				return path, nil
+			}
+		}
+	}
+
+	uri, err := url.Parse(input)
+	if err != nil || (uri.Host != "" && uri.Host != "localhost") || uri.User != nil || uri.RawQuery != "" || uri.Fragment != "" {
+		return "", fmt.Errorf("invalid local file URI")
+	}
+	path := uri.Path
+	if len(path) > 0 && path[0] == '/' && filepath.VolumeName(path[1:]) != "" {
+		path = path[1:]
+	}
+	return path, nil
+}
+
+func isWindowsDrivePath(path string) bool {
+	return len(path) >= 3 &&
+		((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z')) &&
+		path[1] == ':' && (path[2] == '/' || path[2] == '\\')
 }
 
 // ChopPath returns the part of p after the last path separator. URLs are

@@ -41,6 +41,41 @@ func TestAudioPaths(t *testing.T) {
 	}
 }
 
+func TestLocalFileURIPath(t *testing.T) {
+	windowsPath := func(path string) string {
+		if filepath.VolumeName(path) != "" {
+			return path
+		}
+		return "/" + path
+	}
+	for _, tc := range []struct {
+		input string
+		want  string
+	}{
+		{
+			"file://C:%5CUsers%5CRUNNER~1%5CAppData%5CLocal%5CTemp%5C%E9%9F%B3%E4%B9%90%20%231.mp3",
+			`C:\Users\RUNNER~1\AppData\Local\Temp\音乐 #1.mp3`,
+		},
+		{"file:///C:/Users/test/music%20%231.mp3", windowsPath("C:/Users/test/music #1.mp3")},
+		{"file://localhost/C:/Users/test/music.mp3", windowsPath("C:/Users/test/music.mp3")},
+	} {
+		got, err := localFileURIPath(tc.input)
+		if err != nil || got != tc.want {
+			t.Errorf("localFileURIPath(%q) = %q, %v; want %q", tc.input, got, err, tc.want)
+		}
+	}
+	for _, input := range []string{
+		"file://remote/music/song.mp3",
+		"file://C:%5Cmusic.mp3?query=1",
+		"file://C:%5Cmusic.mp3#fragment",
+		"file:///bad%ZZ.mp3",
+	} {
+		if path, err := localFileURIPath(input); err == nil {
+			t.Errorf("localFileURIPath(%q) = %q, want error", input, path)
+		}
+	}
+}
+
 func TestGuessTagText(t *testing.T) {
 	gb, err := simplifiedchinese.GBK.NewEncoder().Bytes([]byte("周杰伦 - 晴天"))
 	if err != nil {
