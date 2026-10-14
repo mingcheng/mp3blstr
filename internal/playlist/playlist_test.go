@@ -64,6 +64,21 @@ func TestRemoveDuplicates(t *testing.T) {
 	}
 }
 
+func TestRemoveDuplicatesNormalizesLocalPaths(t *testing.T) {
+	root := NewGroup("[Default]")
+	group := NewGroup("[Group]")
+	root.AddGroup(group)
+	group.AddSong(filepath.Join(".", "music", "a.mp3"))
+	root.AddSong(filepath.Join("music", "a.mp3"))
+
+	if got := root.RemoveDuplicates(); got != 1 {
+		t.Fatalf("removed %d songs, want 1", got)
+	}
+	if group.Len() != 2 || root.Len() != 1 {
+		t.Fatalf("unexpected playlist sizes: group=%d root=%d", group.Len(), root.Len())
+	}
+}
+
 func TestMoveSelected(t *testing.T) {
 	g := NewGroup("[x]")
 	for _, s := range []string{"a", "b", "c", "d", "e"} {

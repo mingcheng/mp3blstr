@@ -5,6 +5,8 @@ package playlist
 
 import (
 	"fmt"
+	"path/filepath"
+
 	"github.com/mingcheng/mp3blstr/internal/media"
 )
 
@@ -157,11 +159,12 @@ func (g *Group) RemoveDuplicates() int {
 			case KindGroup:
 				removed += remove(it.Group)
 			case KindSong:
-				if seen[it.Path] {
+				key := duplicateKey(it.Path)
+				if seen[key] {
 					removed++
 					continue
 				}
-				seen[it.Path] = true
+				seen[key] = true
 			}
 			kept = append(kept, it)
 		}
@@ -170,6 +173,16 @@ func (g *Group) RemoveDuplicates() int {
 		return removed
 	}
 	return remove(g)
+}
+
+func duplicateKey(path string) string {
+	if media.IsHTTPStream(path) {
+		return path
+	}
+	if absolute, err := filepath.Abs(path); err == nil {
+		return filepath.Clean(absolute)
+	}
+	return path
 }
 
 // --- selection -----------------------------------------------------------
