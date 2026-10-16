@@ -34,15 +34,11 @@ func (s *Screen) drawMixer(c canvas, l layout) {
 	c.put(x, y+1, s.gl.MixerPrefix+dev.Name, th.MixerName, 11)
 	s.onClick(rect{x, y + 1, 11, 1}, func() { s.app.Click(keys.CmdToggleMixer) })
 
-	c.put(x, y+2, "[", th.MixerBracket, 1)
-	c.put(x+1, y+2, "<", th.MixerArrow, 1)
-	c.put(x+2, y+2, "]", th.MixerBracket, 1)
+	s.drawMixerButton(c, x, y+2, s.gl.MixerDown)
 	c.put(x+3, y+2, "+", th.MixerName.Bold(true), 1)
 	c.put(x+4, y+2, fmt.Sprintf("%03d", dev.Value), th.MixerValue, 3)
 	c.put(x+7, y+2, "%", th.MixerName.Bold(true), 1)
-	c.put(x+8, y+2, "[", th.MixerBracket, 1)
-	c.put(x+9, y+2, ">", th.MixerArrow, 1)
-	c.put(x+10, y+2, "]", th.MixerBracket, 1)
+	s.drawMixerButton(c, x+8, y+2, s.gl.MixerUp)
 	s.onClick(rect{x, y + 2, 3, 1}, func() { s.app.MixerVolume(-2) })
 	s.onClick(rect{x + 8, y + 2, 3, 1}, func() { s.app.MixerVolume(2) })
 
@@ -59,6 +55,14 @@ func (s *Screen) drawMixer(c canvas, l layout) {
 	})
 }
 
+func (s *Screen) drawMixerButton(c canvas, x, y int, glyph string) {
+	if s.nerd {
+		c.put(x, y, " "+glyph+" ", s.th.Label.Bold(false), 3)
+		return
+	}
+	c.segs(x, y, 3, seg{"[", s.th.MixerBracket}, seg{glyph, s.th.MixerArrow}, seg{"]", s.th.MixerBracket})
+}
+
 // drawWideMixer draws the mixer with a clickable volume bar:
 //
 //	Volume                      100%
@@ -72,8 +76,8 @@ func (s *Screen) drawWideMixer(c canvas, l layout, name string, value int) {
 	s.onClick(rect{x, y, w - 5, 1}, func() { s.app.Click(keys.CmdToggleMixer) })
 
 	y++
-	c.segs(x, y, 3, seg{"[", th.MixerBracket}, seg{"<", th.MixerArrow}, seg{"]", th.MixerBracket})
-	c.segs(x+w-3, y, 3, seg{"[", th.MixerBracket}, seg{">", th.MixerArrow}, seg{"]", th.MixerBracket})
+	s.drawMixerButton(c, x, y, s.gl.MixerDown)
+	s.drawMixerButton(c, x+w-3, y, s.gl.MixerUp)
 	s.onClick(rect{x, y, 3, 1}, func() { s.app.MixerVolume(-2) })
 	s.onClick(rect{x + w - 3, y, 3, 1}, func() { s.app.MixerVolume(2) })
 

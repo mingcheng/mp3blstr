@@ -498,7 +498,7 @@ func (a *App) HelpBarLines() [][]HelpEntry {
 	for _, group := range a.Keys.Grouped(a.Mode, true) {
 		var line []HelpEntry
 		for _, b := range group {
-			line = append(line, HelpEntry{Label: b.Key.Label(), Desc: b.Desc, Cmd: b.Cmd})
+			line = append(line, HelpEntry{Label: b.Key.Name(), Desc: b.Desc, Cmd: b.Cmd})
 			if len(line) == 3 {
 				lines = append(lines, line)
 				line = nil

@@ -39,18 +39,21 @@ func (s *Screen) drawFrame(c canvas, l layout) {
 
 	// "( - )" and "( + )" scroll the help bar.
 	for _, b := range []struct {
-		y   int
-		cmd keys.Command
-	}{{0, keys.CmdHelpPrev}, {5, keys.CmdHelpNext}} {
-		c.put(w-6, b.y, "(", s.th.Default, 1)
+		y     int
+		cmd   keys.Command
+		glyph string
+	}{{0, keys.CmdHelpPrev, g.HelpPrev}, {5, keys.CmdHelpNext, g.HelpNext}} {
+		c.put(w-6, b.y, b.glyph, s.th.Default, 1)
 		c.put(w-5, b.y, s.app.Keys.LabelFor(b.cmd), s.th.Button, 3)
-		c.put(w-2, b.y, ")", s.th.Default, 1)
+		c.put(w-2, b.y, g.HelpEnd, s.th.Default, 1)
 		s.clickCommand(rect{w - 6, b.y, 5, 1}, b.cmd)
 	}
 }
 
-// helpEntryWidth is the width of an entry in the help bar: "[lbl] desc...".
-const helpEntryWidth = 26
+const (
+	helpEntryWidth = 26
+	helpKeyWidth   = 7
+)
 
 // drawHelpBar draws the key overview at the top of the screen.
 func (s *Screen) drawHelpBar(c canvas, l layout) {
@@ -69,13 +72,27 @@ func (s *Screen) drawHelpBar(c canvas, l layout) {
 			if x >= maxX {
 				break
 			}
-			lim := func(at int) int { return maxX - at }
-			c.put(x, y, "[", s.th.Default, lim(x))
-			c.put(x+1, y, e.Label, s.th.Button, min(3, max(0, lim(x+1))))
-			c.put(x+4, y, "] ", s.th.Default, max(0, lim(x+4)))
-			c.put(x+6, y, padRight(e.Desc, 19)+" ", s.th.Default, max(0, lim(x+6)))
+			width := min(helpEntryWidth-1, maxX-x)
+			keyWidth := 5
+			if s.nerd {
+				keyWidth = helpKeyWidth
+				icon := s.gl.Shortcuts[e.Cmd]
+				if icon == "" {
+					icon = " "
+				}
+				s.drawHelpKey(c, x, y, icon+" "+e.Label, min(keyWidth, width))
+			} else {
+				c.put(x, y, "[", s.th.Default, min(1, width))
+				c.put(x+1, y, s.app.Keys.KeyFor(e.Cmd).Label(), s.th.Button, min(3, max(0, width-1)))
+				c.put(x+4, y, "]", s.th.Default, min(1, max(0, width-4)))
+			}
+			at := x + keyWidth + 1
+			end := x + width
+			if at < end {
+				c.put(at, y, crunch(e.Desc, end-at), s.th.Default, end-at)
+			}
 			cmd := e.Cmd
-			s.onClick(rect{x, y, min(helpEntryWidth-1, maxX-x), 1}, func() { s.app.Click(cmd) })
+			s.onClick(rect{x, y, width, 1}, func() { s.app.Click(cmd) })
 		}
 	}
 	s.onMouse(l.help, func(action tview.MouseAction, _, _ int) bool {
@@ -91,12 +108,12 @@ func (s *Screen) drawHelpBar(c canvas, l layout) {
 	})
 }
 
-func padRight(s string, n int) string {
-	r := []rune(s)
-	for len(r) < n {
-		r = append(r, ' ')
-	}
-	return string(r)
+func (s *Screen) drawHelpKey(c canvas, x, y int, label string, width int) {
+	style := s.th.Label.Bold(false)
+	c.fill(x, y, width, 1, style)
+	label = crunch(label, helpKeyWidth-2)
+	pad := (helpKeyWidth - uniseg.StringWidth(label)) / 2
+	c.put(x+pad, y, label, style, max(0, width-pad))
 }
 
 // drawInfo draws the play mode (or sort mode) and the next song.

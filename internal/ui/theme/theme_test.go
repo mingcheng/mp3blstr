@@ -4,11 +4,31 @@ import (
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/uniseg"
 )
 
 func bgOf(s tcell.Style) tcell.Color {
 	_, bg, _ := s.Decompose()
 	return bg
+}
+
+func TestControlGlyphWidths(t *testing.T) {
+	for _, nerd := range []bool{false, true} {
+		g := For(Classic(), nerd)
+		for _, glyph := range []string{g.Checked, g.Unchecked} {
+			if got := uniseg.StringWidth(glyph); got != 3 {
+				t.Errorf("checkbox %q width = %d, want 3", glyph, got)
+			}
+		}
+		for _, glyph := range []string{g.MixerDown, g.MixerUp, g.HelpPrev, g.HelpNext, g.HelpEnd} {
+			if got := uniseg.StringWidth(glyph); got != 1 {
+				t.Errorf("control %q width = %d, want 1", glyph, got)
+			}
+		}
+		if g.Checked == g.Unchecked {
+			t.Error("checkbox states must be visually distinct")
+		}
+	}
 }
 
 // TestClassicTransparentBackground checks that the default theme leaves the

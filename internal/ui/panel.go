@@ -32,11 +32,11 @@ func (c canvas) segs(x, y, width int, parts ...seg) int {
 	return used
 }
 
-func check(v bool) string {
+func (s *Screen) checkbox(v bool) string {
 	if v {
-		return "X"
+		return s.gl.Checked
 	}
-	return " "
+	return s.gl.Unchecked
 }
 
 // drawPanel draws the right hand panel: song information, the threads
@@ -67,8 +67,8 @@ func (s *Screen) drawPanel(c canvas, l layout) {
 	c.put(r+8, 9, fmt.Sprintf("%03d", s.app.Opts.Threads), def, 3)
 	s.clickCommand(rect{r, 9, 11, 1}, keys.CmdChangeThread)
 
-	c.put(r, 11, "["+check(s.app.Shuffle())+"] shuffle", def, 11)
-	c.put(r, 12, "["+check(s.app.Repeat())+"] repeat", def, 11)
+	c.put(r, 11, s.checkbox(s.app.Shuffle())+" shuffle", def, 11)
+	c.put(r, 12, s.checkbox(s.app.Repeat())+" repeat", def, 11)
 	s.clickCommand(rect{r, 11, 11, 1}, keys.CmdToggleShuffle)
 	s.clickCommand(rect{r, 12, 11, 1}, keys.CmdToggleRepeat)
 
@@ -133,13 +133,13 @@ func (s *Screen) drawWidePanel(c canvas, l layout) {
 	c.segs(x, 9, w, seg{"Threads: ", def}, seg{fmt.Sprintf("%03d", s.app.Opts.Threads), num})
 	s.clickCommand(rect{x, 9, w, 1}, keys.CmdChangeThread)
 
-	shuffle := "[" + check(s.app.Shuffle()) + "] shuffle"
-	repeat := "[" + check(s.app.Repeat()) + "] repeat"
+	shuffle := s.checkbox(s.app.Shuffle()) + " shuffle"
+	repeat := s.checkbox(s.app.Repeat()) + " repeat"
 	c.put(x, 11, shuffle, def, w)
 	rx := x + uniseg.StringWidth(shuffle) + 3
 	c.put(rx, 11, repeat, def, x+w-rx)
-	s.clickCommand(rect{x, 11, len(shuffle), 1}, keys.CmdToggleShuffle)
-	s.clickCommand(rect{rx, 11, len(repeat), 1}, keys.CmdToggleRepeat)
+	s.clickCommand(rect{x, 11, uniseg.StringWidth(shuffle), 1}, keys.CmdToggleShuffle)
+	s.clickCommand(rect{rx, 11, uniseg.StringWidth(repeat), 1}, keys.CmdToggleRepeat)
 
 	if !ok {
 		return

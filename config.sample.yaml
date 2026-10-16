@@ -9,6 +9,10 @@
 ui:
   # theme: classic           # classic or modern (switch at run time: T)
   # nerd_font: false         # needs a Nerd Font in the terminal (toggle: I)
+  #                          # enables coloured help bar keycaps and icons
+  #                          # entries without icons keep a blank icon slot
+  #                          # also styles checkboxes, mixer and paging arrows
+  #                          # false restores original [F 1] shortcut labels
   # mouse: true
   # list_width: 75%          # width of the file/playlist window: a
   #                          # percentage of the terminal (min. 60 columns),
