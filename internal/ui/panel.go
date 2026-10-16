@@ -186,7 +186,7 @@ func (s *Screen) drawProgress(c canvas, r rect, elapsed, total int) {
 		}
 		s.app.SeekTo((mx - r.x) * total / r.w)
 		return true
-	})
+	}, pointerCommand)
 }
 
 // drawButtons draws the CD-player style buttons with their key labels.
@@ -221,7 +221,7 @@ func (s *Screen) drawButtons(c canvas, l layout) {
 		c.put(x+pad, b.y, b.symbol, s.th.Label, 3)
 		c.put(x+pad, b.y+1, s.app.Keys.LabelFor(b.cmd), s.th.Label, 3)
 		cmd := b.cmd
-		s.onClick(rect{x, b.y, bw, 2}, func() { s.app.Click(cmd) })
+		s.clickAction(rect{x, b.y, bw, 2}, cmd)
 	}
 }
 
@@ -232,7 +232,7 @@ func (s *Screen) drawStatus(c canvas, l layout) {
 	if sym, ok := s.gl.Status[p.Status()]; ok {
 		c.put(l.status.x, l.status.y, sym, def, 2)
 	}
-	s.onClick(rect{l.status.x, l.status.y, 2, 1}, func() { s.app.Click(keys.CmdPlayPlay) })
+	s.clickAction(rect{l.status.x, l.status.y, 2, 1}, keys.CmdPlayPlay)
 	if path, info, ok := p.SongInfo(); ok {
 		c.put(l.title.x, l.title.y, songTitle(path, info), def, l.title.w)
 	}

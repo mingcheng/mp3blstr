@@ -4,6 +4,8 @@
 package ui
 
 import (
+	"errors"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -32,6 +34,7 @@ type UI struct {
 	app          *app.App
 	tickWake     chan struct{}
 	tickInterval atomic.Int64
+	pointer      pointerProtocol
 }
 
 // New creates the interface. Call Attach before Run.
@@ -42,6 +45,9 @@ func New(opts Options) *UI {
 		tickWake: make(chan struct{}, 1),
 	}
 	u.tapp.EnableMouse(opts.Mouse)
+	if opts.Mouse {
+		u.pointer = detectPointer(os.Getenv)
+	}
 	u.tapp.EnablePaste(true)
 	u.tapp.SetRoot(u.screen, true)
 	u.tapp.SetAfterDrawFunc(func(tcell.Screen) { u.scheduleTick() })
@@ -73,11 +79,30 @@ func (u *UI) Quit() { u.tapp.Stop() }
 
 // Run starts the event loop; it returns when the program quits.
 func (u *UI) Run() error {
+	var pointer *pointerScreen
+	if u.pointer != pointerUnsupported {
+		scr, err := tcell.NewScreen()
+		if err != nil {
+			return err
+		}
+		pointer = &pointerScreen{Screen: scr, protocol: u.pointer}
+		// SetScreen calls Init but discards its error.
+		u.tapp.SetScreen(pointer)
+		if pointer.initErr != nil {
+			return pointer.initErr
+		}
+		pointer.EnableMouse()
+		pointer.EnablePaste()
+	}
 	done := make(chan struct{})
 	defer close(done)
 	u.scheduleTick()
 	go u.tick(done)
-	return u.tapp.Run()
+	err := u.tapp.Run()
+	if pointer != nil {
+		err = errors.Join(err, pointer.pointerError())
+	}
+	return err
 }
 
 // tick disables its timer while idle and redraws only when something changed.

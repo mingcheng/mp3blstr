@@ -26,7 +26,7 @@ func (s *Screen) drawTask(c canvas, l layout) {
 	x := l.list.x + (l.list.w-w)/2
 	y := l.list.y + (l.list.h-h)/2
 	c.fill(x, y, w, h, s.th.Popup)
-	s.onMouse(rect{0, 0, l.w, l.h}, func(tview.MouseAction, int, int) bool { return true })
+	s.onMouse(rect{0, 0, l.w, l.h}, func(tview.MouseAction, int, int) bool { return true }, pointerDefault)
 
 	inner := w - 2
 	row := y + (h-5)/2

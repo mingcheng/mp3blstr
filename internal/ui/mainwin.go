@@ -68,7 +68,8 @@ func (s *Screen) drawMain(c canvas, l layout) {
 			return false
 		}
 		return true
-	})
+	}, pointerDefault)
+	s.onMouse(rect{l.list.x, l.list.y, l.list.w, to - from}, nil, pointerCommand)
 }
 
 // drawMainTitle centres the window title in the top border, framed by tees

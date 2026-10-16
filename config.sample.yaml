@@ -14,6 +14,8 @@ ui:
   #                          # also styles checkboxes, mixer and paging arrows
   #                          # false restores original [F 1] shortcut labels
   # mouse: true
+  #                          # includes hover pointers in supported terminals;
+  #                          # disabled inside tmux/screen
   # list_width: 75%          # width of the file/playlist window: a
   #                          # percentage of the terminal (min. 60 columns),
   #                          # a number of columns, or 0 = terminal width - 12

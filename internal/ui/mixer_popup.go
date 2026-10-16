@@ -24,7 +24,7 @@ func (s *Screen) drawMixer(c canvas, l layout) {
 	c.put(x, y, "[", def, 1)
 	c.put(x+1, y, s.app.Keys.LabelFor(keys.CmdToggleMixer), th.Button, 3)
 	c.put(x+4, y, "]Mixer", def, 6)
-	s.onClick(rect{x, y, 10, 1}, func() { s.app.Click(keys.CmdToggleMixer) })
+	s.clickAction(rect{x, y, 10, 1}, keys.CmdToggleMixer)
 
 	dev := m.Current()
 	if l.wide() {
@@ -32,7 +32,7 @@ func (s *Screen) drawMixer(c canvas, l layout) {
 		return
 	}
 	c.put(x, y+1, s.gl.MixerPrefix+dev.Name, th.MixerName, 11)
-	s.onClick(rect{x, y + 1, 11, 1}, func() { s.app.Click(keys.CmdToggleMixer) })
+	s.clickAction(rect{x, y + 1, 11, 1}, keys.CmdToggleMixer)
 
 	s.drawMixerButton(c, x, y+2, s.gl.MixerDown)
 	c.put(x+3, y+2, "+", th.MixerName.Bold(true), 1)
@@ -52,7 +52,7 @@ func (s *Screen) drawMixer(c canvas, l layout) {
 			return false
 		}
 		return true
-	})
+	}, pointerPass)
 }
 
 func (s *Screen) drawMixerButton(c canvas, x, y int, glyph string) {
@@ -73,7 +73,7 @@ func (s *Screen) drawWideMixer(c canvas, l layout, name string, value int) {
 	c.put(x, y, s.gl.MixerPrefix+name, th.MixerName, w-5)
 	pct := fmt.Sprintf("%3d%%", value)
 	c.put(x+w-len(pct), y, pct, th.MixerValue, len(pct))
-	s.onClick(rect{x, y, w - 5, 1}, func() { s.app.Click(keys.CmdToggleMixer) })
+	s.clickAction(rect{x, y, w - 5, 1}, keys.CmdToggleMixer)
 
 	y++
 	s.drawMixerButton(c, x, y, s.gl.MixerDown)
@@ -91,7 +91,7 @@ func (s *Screen) drawWideMixer(c canvas, l layout, name string, value int) {
 		}
 		s.app.MixerSet((mx - bar.x + 1) * 100 / bar.w)
 		return true
-	})
+	}, pointerHand)
 	s.onMouse(rect{l.px, l.mixerY(), l.pw, 3}, func(action tview.MouseAction, _, _ int) bool {
 		switch action {
 		case tview.MouseScrollUp:
@@ -102,7 +102,7 @@ func (s *Screen) drawWideMixer(c canvas, l layout, name string, value int) {
 			return false
 		}
 		return true
-	})
+	}, pointerPass)
 }
 
 // drawPopup draws the input dialog over the main window. It returns true
@@ -123,7 +123,7 @@ func (s *Screen) drawPopup(c canvas, l layout) bool {
 	c.fill(ix, iy, iw, 1, s.th.PopupInput)
 	if p.Confirm {
 		c.put(ix, iy, "[y] Yes   [n] No", s.th.PopupInput, iw)
-		s.onMouse(rect{0, 0, l.w, l.h}, func(tview.MouseAction, int, int) bool { return true })
+		s.onMouse(rect{0, 0, l.w, l.h}, func(tview.MouseAction, int, int) bool { return true }, pointerDefault)
 		return false
 	}
 	text, col, first := p.Editor.Visible(iw)
@@ -132,7 +132,7 @@ func (s *Screen) drawPopup(c canvas, l layout) bool {
 
 	// Clicks in the input field move the cursor; everything else under the
 	// popup is blocked.
-	s.onMouse(rect{0, 0, l.w, l.h}, func(tview.MouseAction, int, int) bool { return true })
+	s.onMouse(rect{0, 0, l.w, l.h}, func(tview.MouseAction, int, int) bool { return true }, pointerDefault)
 	s.onMouse(rect{ix, iy, iw, 1}, func(action tview.MouseAction, x, _ int) bool {
 		if action != tview.MouseLeftClick {
 			return true
@@ -148,6 +148,6 @@ func (s *Screen) drawPopup(c canvas, l layout) bool {
 		}
 		s.app.PopupCursor(idx)
 		return true
-	})
+	}, pointerText)
 	return true
 }

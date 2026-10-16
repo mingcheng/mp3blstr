@@ -22,8 +22,9 @@ import (
 type mouseFunc func(action tview.MouseAction, x, y int) bool
 
 type hitArea struct {
-	r  rect
-	fn mouseFunc
+	r       rect
+	fn      mouseFunc
+	pointer pointerShape
 }
 
 // Screen is the root primitive. It draws the complete mp3blstr screen
@@ -36,44 +37,61 @@ type Screen struct {
 	gl   theme.Glyphs
 	nerd bool
 	// width is the width of the main window.
-	width listview.Width
-	scr   tcell.Screen
-	hits  []hitArea
-	title string
+	width          listview.Width
+	scr            tcell.Screen
+	hits           []hitArea
+	title          string
+	mouseX, mouseY int
+	mouseKnown     bool
 }
 
 func newScreen(th theme.Theme, gl theme.Glyphs, nerd bool, width listview.Width) *Screen {
 	return &Screen{Box: tview.NewBox(), th: th, gl: gl, nerd: nerd, width: width}
 }
 
-func (s *Screen) onMouse(r rect, fn mouseFunc) {
+func (s *Screen) onMouse(r rect, fn mouseFunc, pointer pointerShape) {
 	if r.w > 0 && r.h > 0 {
-		s.hits = append(s.hits, hitArea{r, fn})
+		s.hits = append(s.hits, hitArea{r: r, fn: fn, pointer: pointer})
 	}
 }
 
 // onClick registers a left-click action.
 func (s *Screen) onClick(r rect, fn func()) {
+	s.onClickShape(r, fn, pointerHand)
+}
+
+func (s *Screen) onClickShape(r rect, fn func(), pointer pointerShape) {
 	s.onMouse(r, func(action tview.MouseAction, _, _ int) bool {
 		if action == tview.MouseLeftClick || action == tview.MouseLeftDoubleClick {
 			fn()
 			return true
 		}
 		return false
-	})
+	}, pointer)
+}
+
+func (s *Screen) clickAction(r rect, cmd keys.Command) {
+	s.onClickShape(r, func() { s.app.Click(cmd) }, pointerCommand)
 }
 
 // clickCommand registers a click that runs cmd when it is valid in the
 // current program mode.
 func (s *Screen) clickCommand(r rect, cmd keys.Command) {
-	s.onClick(r, func() {
+	pointer := pointerDefault
+	for _, b := range s.app.Keys.ForMode(s.app.Mode) {
+		if b.Cmd == cmd {
+			pointer = pointerCommand
+			break
+		}
+	}
+	s.onClickShape(r, func() {
 		for _, b := range s.app.Keys.ForMode(s.app.Mode) {
 			if b.Cmd == cmd {
 				s.app.Click(cmd)
 				return
 			}
 		}
-	})
+	}, pointer)
 }
 
 // syncLook rebuilds the theme and glyphs when the theme or Nerd Font option
@@ -106,6 +124,7 @@ func (s *Screen) Draw(scr tcell.Screen) {
 	w, h := scr.Size()
 	s.SetRect(0, 0, w, h)
 	s.hits = s.hits[:0]
+	defer s.updatePointer()
 	c := canvas{scr: scr, w: w, h: h}
 	c.fill(0, 0, w, h, s.th.Default)
 	l := newLayout(w, h, s.width)
@@ -197,11 +216,16 @@ func (s *Screen) PasteHandler() func(string, func(tview.Primitive)) {
 func (s *Screen) MouseHandler() func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(p tview.Primitive)) (bool, tview.Primitive) {
 	return s.WrapMouseHandler(func(action tview.MouseAction, event *tcell.EventMouse, _ func(p tview.Primitive)) (bool, tview.Primitive) {
 		x, y := event.Position()
+		s.mouseX, s.mouseY, s.mouseKnown = x, y, true
+		pointerError := s.updatePointer()
+		if action == tview.MouseMove {
+			return pointerError, nil
+		}
 		for i := len(s.hits) - 1; i >= 0; i-- {
-			if s.hits[i].r.contains(x, y) && s.hits[i].fn(action, x, y) {
+			if s.hits[i].fn != nil && s.hits[i].r.contains(x, y) && s.hits[i].fn(action, x, y) {
 				return true, nil
 			}
 		}
-		return false, nil
+		return pointerError, nil
 	})
 }

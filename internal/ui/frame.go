@@ -92,7 +92,7 @@ func (s *Screen) drawHelpBar(c canvas, l layout) {
 				c.put(at, y, crunch(e.Desc, end-at), s.th.Default, end-at)
 			}
 			cmd := e.Cmd
-			s.onClick(rect{x, y, width, 1}, func() { s.app.Click(cmd) })
+			s.clickAction(rect{x, y, width, 1}, cmd)
 		}
 	}
 	s.onMouse(l.help, func(action tview.MouseAction, _, _ int) bool {
@@ -105,7 +105,7 @@ func (s *Screen) drawHelpBar(c canvas, l layout) {
 			return false
 		}
 		return true
-	})
+	}, pointerPass)
 }
 
 func (s *Screen) drawHelpKey(c canvas, x, y int, label string, width int) {
@@ -119,7 +119,11 @@ func (s *Screen) drawHelpKey(c canvas, x, y int, label string, width int) {
 // drawInfo draws the play mode (or sort mode) and the next song.
 func (s *Screen) drawInfo(c canvas, l layout) {
 	c.put(l.modeLine.x, l.modeLine.y, s.app.ModeLine(), s.th.Default, l.modeLine.w)
-	s.onClick(l.modeLine, s.app.ClickModeLine)
+	pointer := pointerDefault
+	if s.app.Mode == keys.ModeNormal || s.app.Mode == keys.ModeFileSelection {
+		pointer = pointerCommand
+	}
+	s.onClickShape(l.modeLine, s.app.ClickModeLine, pointer)
 	c.put(2, 7, "Next Song      :", s.th.Default, -1)
 	c.put(l.nextSong.x, l.nextSong.y, s.app.Player.NextSongName(), s.th.Default, l.nextSong.w)
 }

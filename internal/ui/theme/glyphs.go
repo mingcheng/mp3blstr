@@ -105,7 +105,6 @@ func Nerd(rounded bool) Glyphs {
 			keys.CmdFileSelect:       "\U000F0132",
 			keys.CmdToggleTheme:      "\U000F050E",
 			keys.CmdToggleNerdFont:   "\U000F031C",
-			keys.CmdHelp:             "\U000F02D6",
 			keys.CmdQuitProgram:      "\U000F0343",
 			keys.CmdRefresh:          "\U000F0450",
 		},
