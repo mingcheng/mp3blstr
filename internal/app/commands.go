@@ -45,9 +45,9 @@ func (a *App) Exec(cmd keys.Command) {
 	case keys.CmdPlayPlay:
 		p.Play()
 	case keys.CmdPlayNext:
-		p.Next()
+		a.PlayNext()
 	case keys.CmdPlayPrevious:
-		p.Previous()
+		a.PlayPrevious()
 	case keys.CmdPlayForward:
 		p.Forward()
 	case keys.CmdPlayRewind:
@@ -57,7 +57,7 @@ func (a *App) Exec(cmd keys.Command) {
 	case keys.CmdPlaySkipEnd:
 		p.SkipToEnd()
 	case keys.CmdPlayNextGroup:
-		p.NextGroup()
+		a.skip(p.NextGroup)
 	case keys.CmdPlayPrevGroup:
 		p.PreviousGroup()
 
@@ -98,6 +98,14 @@ func (a *App) Exec(cmd keys.Command) {
 		a.pan(a.Opts.PanSize)
 	case keys.CmdToggleWrap:
 		a.Opts.Wrap = !a.Opts.Wrap
+	case keys.CmdToggleScroll:
+		a.Opts.ScrollPlaying = !a.Opts.ScrollPlaying
+		a.marquee = 0
+		if a.Opts.ScrollPlaying {
+			a.SetMessage("Scrolling of the playing song enabled")
+		} else {
+			a.SetMessage("Scrolling of the playing song disabled")
+		}
 	case keys.CmdToggleTheme:
 		a.Opts.Theme = config.NextTheme(a.Opts.Theme)
 		a.SetMessage("Theme: " + a.Opts.Theme)
@@ -277,7 +285,8 @@ func (a *App) pan(delta int) {
 	from, to := v.Visible(a.MainLen())
 	longest := 0
 	for i := from; i < to; i++ {
-		if l := len([]rune(a.MainRow(i).Text)); l > longest {
+		r := a.MainRow(i)
+		if l := len([]rune(r.Prefix + r.Text)); l > longest {
 			longest = l
 		}
 	}

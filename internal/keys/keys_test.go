@@ -105,6 +105,22 @@ func TestRepeatShuffleKeys(t *testing.T) {
 	}
 }
 
+func TestToggleScrollKey(t *testing.T) {
+	tb := Default()
+	for _, m := range []Mode{ModeNormal, ModeFileSelection, ModeHelp} {
+		if tb.Lookup(Rune('F'), m) != CmdToggleScroll {
+			t.Fatalf("F must toggle scrolling of the playing song in mode %d", m)
+		}
+	}
+	if tb.LabelFor(CmdToggleScroll) != " F " {
+		t.Fatal("F is the scrolling toggle key")
+	}
+	cmd, ok := CommandForConfigName("key.togglescroll")
+	if !ok || cmd != CmdToggleScroll {
+		t.Fatal("key.togglescroll must rebind the scrolling toggle")
+	}
+}
+
 func TestGroupedHelpBar(t *testing.T) {
 	tb := Default()
 	groups := tb.Grouped(ModeNormal, true)

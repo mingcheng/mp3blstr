@@ -138,6 +138,7 @@ func Default() *Table {
 	add(GroupDisplay, false,
 		entry{r('f'), CmdToggleDisplay, NF, "Toggle File Display"},
 		entry{r('w'), CmdToggleWrap, A, "Toggle List Wrap"},
+		entry{r('F'), CmdToggleScroll, A, "Scroll Playing Name"},
 		entry{r('T'), CmdToggleTheme, A, "Switch Theme"},
 		entry{r('I'), CmdToggleNerdFont, A, "Toggle Nerd Font"},
 		entry{f(10), CmdChangeThread, A, "Change #Threads"},

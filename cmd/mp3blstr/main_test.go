@@ -68,6 +68,20 @@ func TestMediaVolume(t *testing.T) {
 	}
 }
 
+// Next and Previous go through the app, which shows the new song in the
+// playlist; they must not fail while nothing plays.
+func TestMediaSkipThroughApp(t *testing.T) {
+	a := &app.App{Player: &playback.Controller{}, Opts: config.Default()}
+	for _, action := range []mediakeys.Action{mediakeys.Next, mediakeys.Previous} {
+		if err := handleAppMediaCommand(a, mediakeys.Command{Action: action}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if a.Player.Playing() {
+		t.Fatal("skipping must not start playback")
+	}
+}
+
 func TestMediaRepeatModes(t *testing.T) {
 	a := &app.App{Player: &playback.Controller{}, Opts: config.Default()}
 	var modes []string

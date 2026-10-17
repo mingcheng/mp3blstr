@@ -41,7 +41,12 @@ func (s *Screen) drawMain(c canvas, l layout) {
 			c.put(x+width-right, y, row.Right, style, right)
 			width -= right + 1
 		}
-		c.put(x, y, skipCells(row.Text, v.Pan), style, width)
+		if row.Marquee {
+			used := c.put(x, y, row.Prefix, style, width)
+			c.put(x+used, y, marquee(row.Text, row.Scroll, width-used), style, width-used)
+		} else {
+			c.put(x, y, skipCells(row.Prefix+row.Text, v.Pan), style, width)
+		}
 	}
 
 	s.onMouse(l.list, func(action tview.MouseAction, _, y int) bool {

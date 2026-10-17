@@ -73,6 +73,7 @@ const (
 	CmdToggleNerdFont
 	CmdRemoveDuplicates
 	CmdAddPaths
+	CmdToggleScroll
 )
 
 // Mode is a bit mask of program modes, so a binding can be valid in several.
@@ -160,6 +161,7 @@ var configNames = map[string]Command{
 	"key.togglewrap":           CmdToggleWrap,
 	"key.toggletheme":          CmdToggleTheme,
 	"key.togglenerdfont":       CmdToggleNerdFont,
+	"key.togglescroll":         CmdToggleScroll,
 }
 
 // CommandForConfigName resolves a "key.*" binding name (see configNames).

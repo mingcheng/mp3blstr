@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"strings"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/uniseg"
 )
@@ -78,6 +80,43 @@ func skipCells(text string, n int) string {
 		if used >= n {
 			from, _ := g.Positions()
 			return text[from:]
+		}
+		used += g.Width()
+	}
+	return ""
+}
+
+// The marquee rests at the start of the name for marqueeHold steps and
+// separates the end of the name from its repeated start by at least
+// marqueeGap.
+const (
+	marqueeHold = 4
+	marqueeGap  = "   "
+)
+
+// marquee returns text scrolled step cells to the left in a window of width
+// cells. The text moves out on the left and comes back in on the right: a
+// name that fits travels across the whole window, a longer one follows its
+// own end after marqueeGap. A wide character cut at the left edge is
+// replaced by spaces so the text does not jump.
+func marquee(text string, step, width int) string {
+	if width <= 0 || step <= 0 {
+		return text
+	}
+	tw := uniseg.StringWidth(text)
+	period := max(tw+len(marqueeGap), width)
+	off := step%(period+marqueeHold) - marqueeHold
+	if off <= 0 {
+		return text
+	}
+	strip := text + strings.Repeat(" ", period-tw)
+	loop := strip + strip
+	g := uniseg.NewGraphemes(loop)
+	used := 0
+	for g.Next() {
+		if used >= off {
+			from, _ := g.Positions()
+			return strings.Repeat(" ", used-off) + loop[from:]
 		}
 		used += g.Width()
 	}

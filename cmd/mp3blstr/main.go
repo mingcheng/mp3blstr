@@ -254,6 +254,10 @@ func handleAppMediaCommand(a *app.App, command mediakeys.Command) error {
 			return errors.New("missing file-open request")
 		}
 		return a.OpenAudioPaths(command.Request.Paths, command.Request.Enqueue)
+	case mediakeys.Next:
+		a.PlayNext()
+	case mediakeys.Previous:
+		a.PlayPrevious()
 	default:
 		return handleMediaCommand(a.Player, command)
 	}

@@ -205,13 +205,14 @@ func TestStateSettingsRoundTrip(t *testing.T) {
 	o.SortMode, o.PlayMode, o.Repeat = filemanager.SortSizeBig, playback.PlaySongs, true
 	o.DisplayMode, o.FileDisplayMode = playlist.DisplayID3, filemanager.DisplayPlain
 	o.FadeOut = true
+	o.ScrollPlaying = false
 	o.Volume, o.Balance = 42, 60
 	o.LastDir, o.LastSong, o.LastPosition = "/music", "/music/a, b #1: 'x'.mp3", 95
 
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	before := Default().StateSettings()
 	changed := ChangedSettings(before, o.StateSettings())
-	if len(changed) != 15 {
+	if len(changed) != 16 {
 		t.Fatalf("changed %v", changed)
 	}
 	if err := SaveSettings(path, changed); err != nil {
@@ -244,6 +245,22 @@ func TestStateKeywordErrors(t *testing.T) {
 		if err := Default().Parse(strings.NewReader(in)); err == nil {
 			t.Errorf("%q: expected error", in)
 		}
+	}
+}
+
+func TestScrollPlayingSetting(t *testing.T) {
+	o := Default()
+	if !o.ScrollPlaying {
+		t.Fatal("scrolling the playing song should be enabled by default")
+	}
+	if err := o.Parse(strings.NewReader("ui: {scroll_playing: false}")); err != nil {
+		t.Fatal(err)
+	}
+	if o.ScrollPlaying {
+		t.Fatal("scrolling the playing song should be disabled by configuration")
+	}
+	if err := Default().Parse(strings.NewReader("ui: {scroll_playing: maybe}")); err == nil {
+		t.Fatal("expected error")
 	}
 }
 

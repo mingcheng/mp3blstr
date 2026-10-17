@@ -224,6 +224,9 @@ func clean(s string) string {
 	return recode(strings.TrimSpace(strings.Trim(s, "\x00")))
 }
 
+// ID3Prefix marks names built from ID3 tags (see ID3Name).
+const ID3Prefix = "[ID3] "
+
 // ID3Name returns "[ID3] artist - title" for files with tags, or fallback
 // when the file has no usable tag. Results are cached.
 func ID3Name(path, fallback string) string {
@@ -250,7 +253,7 @@ func ID3Name(path, fallback string) string {
 		if title == "" {
 			title = "Unknown Title"
 		}
-		name = "[ID3] " + artist + " - " + title
+		name = ID3Prefix + artist + " - " + title
 	}
 	storeEntry(path, func(entry *metadataEntry) {
 		entry.Name = &name

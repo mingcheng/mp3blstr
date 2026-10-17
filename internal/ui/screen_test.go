@@ -37,25 +37,36 @@ func render(t *testing.T, w, h int, setup func(*app.App)) []string {
 
 func renderWidth(t *testing.T, w, h int, listWidth listview.Width, setup func(*app.App)) []string {
 	t.Helper()
+	a := newRenderApp(t, nullBackend{}, nullView{})
+	if setup != nil {
+		setup(a)
+	}
+	return draw(t, a, w, h, listWidth)
+}
+
+func newRenderApp(t *testing.T, backend playback.Backend, view app.View) *app.App {
+	t.Helper()
+	m, _ := media.NewMatcher(nil, nil)
+	return app.New(app.Deps{
+		Options:  config.Default(),
+		Keys:     keys.Default(),
+		Matcher:  m,
+		Mixer:    audio.NewMixer(),
+		Backend:  backend,
+		View:     view,
+		StartDir: t.TempDir(),
+	})
+}
+
+// draw renders a on a w x h screen and returns its lines.
+func draw(t *testing.T, a *app.App, w, h int, listWidth listview.Width) []string {
+	t.Helper()
 	sim := tcell.NewSimulationScreen("UTF-8")
 	if err := sim.Init(); err != nil {
 		t.Fatal(err)
 	}
 	defer sim.Fini()
 	sim.SetSize(w, h)
-	m, _ := media.NewMatcher(nil, nil)
-	a := app.New(app.Deps{
-		Options:  config.Default(),
-		Keys:     keys.Default(),
-		Matcher:  m,
-		Mixer:    audio.NewMixer(),
-		Backend:  nullBackend{},
-		View:     nullView{},
-		StartDir: t.TempDir(),
-	})
-	if setup != nil {
-		setup(a)
-	}
 	s := newScreen(theme.Classic(), theme.Plain(false), false, listWidth)
 	s.app = a
 	s.Draw(sim)

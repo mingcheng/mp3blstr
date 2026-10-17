@@ -79,13 +79,18 @@ const (
 	RowOther
 )
 
-// Row is a line of the main window.
+// Row is a line of the main window. When Marquee is set (the name of the
+// song being played), Text scrolls Scroll steps to the left while Prefix,
+// a status label such as "[ID3] ", stays in place.
 type Row struct {
 	Text    string
+	Prefix  string
 	Right   string
 	Kind    RowKind
 	Marked  bool
 	Playing bool
+	Marquee bool
+	Scroll  int
 }
 
 // groupView is the view state of a playlist group in the main window.
@@ -142,6 +147,9 @@ type App struct {
 	statusFile    string
 	statusSig     string // last state written to statusFile
 	mainWidth     int    // columns of the main window, for panning
+	marquee       int    // scroll steps of the playing song's name
+	marqueeTrack  int    // Player.TrackID the steps belong to
+	locate        bool   // show the next song that starts in the playlist
 	durations     map[string]int
 	durationQueue []string
 	durationBusy  bool
@@ -248,6 +256,18 @@ func (a *App) playerChanged() {
 	if a.OnPlaybackChange != nil {
 		a.OnPlaybackChange()
 	}
+	if id := a.Player.TrackID(); id != a.marqueeTrack {
+		a.marqueeTrack, a.marquee = id, 0
+	}
+	if a.locate {
+		switch {
+		case a.Player.HasSong():
+			a.locate = false
+			a.locatePlaying()
+		case !a.Player.Playing():
+			a.locate = false
+		}
+	}
 	if a.statusFile == "" {
 		return
 	}
@@ -260,6 +280,58 @@ func (a *App) playerChanged() {
 	if err := a.Player.WriteStatusFile(a.statusFile); err != nil {
 		a.log.Debug("status file", "err", err)
 	}
+}
+
+// PlayNext skips to the next song; the playlist shows it once it starts.
+func (a *App) PlayNext() { a.skip(a.Player.Next) }
+
+// PlayPrevious goes back to the previous song; the playlist shows it once
+// it starts.
+func (a *App) PlayPrevious() { a.skip(a.Player.Previous) }
+
+// skip runs a song skip of the player and, when a new song is being opened,
+// moves the selection bar to it as soon as it plays (see playerChanged).
+func (a *App) skip(f func()) {
+	f()
+	a.locate = a.Player.Playing() && !a.Player.HasSong()
+}
+
+// locatePlaying moves the selection bar of the playlist to the song being
+// played. In the playlist view, the window switches to the group holding
+// the song when it is not in the group on screen.
+func (a *App) locatePlaying() {
+	path, _, ok := a.Player.SongInfo()
+	if !ok || !a.Player.HasSong() {
+		return
+	}
+	g, idx := a.Cur, songIndex(a.Cur, path)
+	if idx < 0 {
+		if g, _ = a.Root.FindSong(path); g == nil {
+			return
+		}
+		idx = songIndex(g, path)
+	}
+	if g != a.Cur {
+		if a.Mode != keys.ModeNormal {
+			return // the file manager adds files to a.Cur: keep it
+		}
+		disp := a.groupView(a.Cur).display
+		a.Cur = g
+		gv := a.groupView(g)
+		gv.display = disp
+		gv.state.Pan = 0
+	}
+	a.groupView(g).state.Set(idx, g.Len())
+}
+
+// songIndex returns the index of the song path in g, or -1.
+func songIndex(g *playlist.Group, path string) int {
+	for i, it := range g.Items {
+		if it.Kind == playlist.KindSong && it.Path == path {
+			return i
+		}
+	}
+	return -1
 }
 
 // --- messages -----------------------------------------------------------------
@@ -320,22 +392,44 @@ func (a *App) WriteSession(path string) error {
 	return playlist.Save(path, a.Root, a.Player.Mode.String())
 }
 
-// Tick is called periodically by the UI to update the play time. It
-// reports whether the screen needs to be redrawn: the play time changed
-// or a progress dialog is animating.
-func (a *App) Tick() bool { return a.Player.Tick() || a.Task != nil }
+// Tick is called periodically by the UI to update the play time and to
+// scroll the name of the playing song. It reports whether the screen needs
+// to be redrawn: the play time changed, the name scrolled or a progress
+// dialog is animating.
+func (a *App) Tick() bool {
+	changed := a.Player.Tick()
+	if a.marqueeRunning() {
+		a.marquee++
+		changed = true
+	}
+	return changed || a.Task != nil
+}
 
 // mpegFrameDuration is the length of an MPEG audio frame at 44.1 kHz.
 const mpegFrameDuration = 26 * time.Millisecond
 
+// marqueeInterval is the time between two scroll steps of the playing
+// song's name.
+const marqueeInterval = 300 * time.Millisecond
+
+// marqueeRunning reports whether the name of the playing song scrolls: the
+// option is on, the playlist is shown and a song plays (pausing stops it).
+func (a *App) marqueeRunning() bool {
+	return a.Opts.ScrollPlaying && a.Mode == keys.ModeNormal && a.Player.HasSong() && !a.Player.Paused()
+}
+
 // TickInterval is zero when no animation is needed. --runframes controls
-// scan animation; playback time only needs a once-per-second refresh.
+// scan animation; playback time only needs a once-per-second refresh unless
+// the name of the playing song scrolls.
 func (a *App) TickInterval() time.Duration {
 	if a.Task != nil {
 		return time.Duration(a.Opts.FPL) * 2 * mpegFrameDuration
 	}
 	if !a.Player.HasSong() || a.Player.Paused() {
 		return 0
+	}
+	if a.marqueeRunning() {
+		return marqueeInterval
 	}
 	return time.Second
 }
@@ -448,6 +542,12 @@ func (a *App) MainRow(i int) Row {
 			}
 			if p, _, ok := a.Player.SongInfo(); ok && a.Player.HasSong() && p == it.Path {
 				r.Playing = true
+				if a.Opts.ScrollPlaying {
+					r.Marquee, r.Scroll = true, a.marquee
+					if rest, ok := strings.CutPrefix(r.Text, media.ID3Prefix); ok {
+						r.Prefix, r.Text = media.ID3Prefix, rest
+					}
+				}
 			}
 		}
 		return r

@@ -39,6 +39,7 @@ func (o *Options) StateSettings() []Setting {
 		{"ui.theme", o.Theme},
 		{"ui.nerd_font", strconv.FormatBool(o.NerdFont)},
 		{"ui.wrap_around", strconv.FormatBool(o.Wrap)},
+		{"ui.scroll_playing", strconv.FormatBool(o.ScrollPlaying)},
 		{"ui.display_mode", o.DisplayMode.String()},
 		{"playback.threads", strconv.Itoa(o.Threads)},
 		{"files.sort_mode", o.SortMode.String()},

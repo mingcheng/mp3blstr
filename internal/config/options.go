@@ -63,6 +63,7 @@ type Options struct {
 	SelectCaseInsensitive bool
 	ScanMP3               bool
 	Wrap                  bool
+	ScrollPlaying         bool // scroll the name of the playing song (marquee)
 
 	// Colours maps the ui.colors settings, as lower case "popupinput.fg"
 	// style names without underscores, to colour names.
@@ -109,6 +110,7 @@ func Default() *Options {
 		MetadataCache:         true,
 		SelectCaseInsensitive: true,
 		Wrap:                  true,
+		ScrollPlaying:         true,
 		Colours:               map[string]string{},
 		Theme:                 Themes[0],
 		Mouse:                 true,

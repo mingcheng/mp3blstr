@@ -22,6 +22,9 @@ ui:
   #                          # (original behaviour)
   # display_mode: filename  # playlist: path, filename or id3 (toggle: f)
   # wrap_around: true        # moving past the end of a list wraps around
+  # scroll_playing: true     # scroll the name of the playing song
+  #                          # (toggle: F); [ID3] labels stay in place,
+  #                          # pausing stops the scrolling
   # confirm_quit: true       # ask for confirmation before quitting
   # pan_size: 5              # columns panned by left/right (1..40)
 
@@ -82,7 +85,8 @@ selection:                   # select/deselect items by pattern (+ and -)
   # case_insensitive: true
 
 # Session state. On exit mp3blstr writes the settings changed during the
-# session back into this file (theme, nerd_font, wrap_around, display modes,
+# session back into this file (theme, nerd_font, wrap_around, scroll_playing,
+# display modes,
 # threads, sort_mode, play_mode, repeat, fade_out, volume, balance and the settings below):
 # existing values are updated in place, new ones are added to their
 # section; comments and blank lines are kept. Command line options are not

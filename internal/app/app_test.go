@@ -61,6 +61,28 @@ func waitTask(t *testing.T, a *App) {
 	}
 }
 
+// fakeTrack is a stopped-in-time track for playback tests.
+type fakeTrack struct {
+	done chan struct{}
+}
+
+func (t *fakeTrack) Start()                {}
+func (t *fakeTrack) Pause()                {}
+func (t *fakeTrack) Stop()                 {}
+func (t *fakeTrack) Done() <-chan struct{} { return t.done }
+func (t *fakeTrack) Info() media.SongInfo  { return media.SongInfo{} }
+func (t *fakeTrack) Elapsed() int          { return 0 }
+func (t *fakeTrack) Seek(int) error        { return nil }
+func (t *fakeTrack) SeekFromEnd(int) error { return nil }
+func (t *fakeTrack) Seekable() bool        { return false }
+func (t *fakeTrack) Err() error            { return nil }
+
+type okBackend struct{}
+
+func (okBackend) Opener(string) func() (playback.Track, error) {
+	return func() (playback.Track, error) { return &fakeTrack{done: make(chan struct{})}, nil }
+}
+
 type noBackend struct{}
 
 func (noBackend) Opener(string) func() (playback.Track, error) {
@@ -154,6 +176,241 @@ func TestSetPlaybackModes(t *testing.T) {
 	press(a, 'R', 'Z')
 	if !a.Repeat() || !a.Shuffle() || changes != 8 {
 		t.Fatal("keyboard modes did not publish changes")
+	}
+}
+
+// writeID3 creates an MP3 file at path holding only an ID3v2.3 tag.
+func writeID3(t *testing.T, path, artist, title string) {
+	t.Helper()
+	var frames []byte
+	for _, f := range []struct{ id, text string }{{"TPE1", "\x00" + artist}, {"TIT2", "\x00" + title}} {
+		header := make([]byte, 10)
+		copy(header, f.id)
+		binary.BigEndian.PutUint32(header[4:8], uint32(len(f.text)))
+		frames = append(append(frames, header...), f.text...)
+	}
+	header := []byte{'I', 'D', '3', 3, 0, 0, 0, 0, 0, 0}
+	for i, size := 9, len(frames); i >= 6; i, size = i-1, size>>7 {
+		header[i] = byte(size & 0x7f)
+	}
+	if err := os.WriteFile(path, append(header, frames...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestScrollPlayingName(t *testing.T) {
+	a, dir := newTestApp(t)
+	first, second := filepath.Join(dir, "first.mp3"), filepath.Join(dir, "second.mp3")
+	writeID3(t, first, "Artist", "A Rather Long Title")
+	writeID3(t, second, "Other", "Song")
+	a.AddFiles([]string{first, second})
+	a.groupView(a.Root).display = playlist.DisplayID3
+	a.Player = playback.New(a.Root, okBackend{}, a.view.Post, (*listener)(a))
+
+	settle := func() {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for !a.Player.HasSong() {
+			if time.Now().After(deadline) {
+				t.Fatal("song did not start")
+			}
+			a.view.(*fakeView).runPosted()
+			time.Sleep(time.Millisecond)
+		}
+	}
+	tick := func(n int) {
+		for range n {
+			a.Tick()
+		}
+	}
+
+	if r := a.MainRow(0); r.Marquee || r.Prefix != "" || r.Text != "[ID3] Artist - A Rather Long Title" {
+		t.Fatalf("idle row %+v", r)
+	}
+	a.Player.Play()
+	settle()
+	r := a.MainRow(0)
+	if !r.Marquee || r.Prefix != media.ID3Prefix || r.Text != "Artist - A Rather Long Title" || r.Scroll != 0 {
+		t.Fatalf("playing row %+v", r)
+	}
+	if other := a.MainRow(1); other.Marquee || other.Prefix != "" {
+		t.Fatalf("only the playing song scrolls: %+v", other)
+	}
+	if got := a.TickInterval(); got != marqueeInterval {
+		t.Fatalf("tick interval %v, want %v", got, marqueeInterval)
+	}
+	tick(3)
+	if r := a.MainRow(0); r.Scroll != 3 {
+		t.Fatalf("scroll %d after 3 ticks", r.Scroll)
+	}
+
+	// Pausing stops the scrolling where it is.
+	a.Player.Pause()
+	tick(3)
+	if r := a.MainRow(0); !r.Marquee || r.Scroll != 3 || a.TickInterval() != 0 {
+		t.Fatalf("paused: %+v interval %v", r, a.TickInterval())
+	}
+	a.Player.Play()
+	tick(1)
+	if r := a.MainRow(0); r.Scroll != 4 {
+		t.Fatalf("resumed: scroll %d", r.Scroll)
+	}
+
+	// The next song starts at the beginning.
+	a.Player.Next()
+	settle()
+	if r := a.MainRow(1); !r.Marquee || r.Scroll != 0 || r.Text != "Other - Song" {
+		t.Fatalf("next song %+v", r)
+	}
+
+	// No scrolling outside the playlist.
+	press(a, '?')
+	before := a.marquee
+	if a.Tick(); a.marquee != before {
+		t.Fatal("help screen must not scroll")
+	}
+	press(a, '?')
+
+	// The F key toggles the option.
+	tick(2)
+	press(a, 'F')
+	if a.Opts.ScrollPlaying || !strings.Contains(a.Msg.Text, "disabled") {
+		t.Fatalf("F should disable scrolling: %q", a.Msg.Text)
+	}
+	if r := a.MainRow(1); r.Marquee || r.Prefix != "" || r.Text != "[ID3] Other - Song" {
+		t.Fatalf("scrolling off: %+v", r)
+	}
+	if got := a.TickInterval(); got != time.Second {
+		t.Fatalf("scrolling off: tick interval %v", got)
+	}
+	press(a, 'F')
+	if r := a.MainRow(1); !a.Opts.ScrollPlaying || !r.Marquee || r.Scroll != 0 {
+		t.Fatalf("F should enable scrolling from the start: %+v", r)
+	}
+}
+
+// startPlayer replaces the player with one whose songs open successfully
+// and returns a function that runs the UI loop until a song plays.
+func startPlayer(t *testing.T, a *App) (settle func()) {
+	t.Helper()
+	a.Player = playback.New(a.Root, okBackend{}, a.view.Post, (*listener)(a))
+	a.Player.Mode = a.Opts.PlayMode
+	return func() {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for !a.Player.HasSong() {
+			if time.Now().After(deadline) {
+				t.Fatal("song did not start")
+			}
+			a.view.(*fakeView).runPosted()
+			time.Sleep(time.Millisecond)
+		}
+	}
+}
+
+func playingPath(t *testing.T, a *App) string {
+	t.Helper()
+	path, _, ok := a.Player.SongInfo()
+	if !ok {
+		t.Fatal("no song")
+	}
+	return path
+}
+
+func TestSkipLocatesPlayingSong(t *testing.T) {
+	a, dir := newTestApp(t)
+	var paths []string
+	for i := range 10 {
+		paths = append(paths, filepath.Join(dir, string(rune('a'+i))+".mp3"))
+	}
+	a.AddFiles(paths)
+	settle := startPlayer(t, a)
+	v := a.MainView()
+	v.SetRows(3, a.MainLen())
+	at := func(want int, what string) {
+		t.Helper()
+		if v.Cursor != want || a.Cur.Item(v.Cursor).Path != playingPath(t, a) {
+			t.Fatalf("%s: cursor=%d want %d (playing %s)", what, v.Cursor, want, playingPath(t, a))
+		}
+		if v.Cursor < v.Offset || v.Cursor >= v.Offset+v.Rows {
+			t.Fatalf("%s: cursor %d not visible (offset %d)", what, v.Cursor, v.Offset)
+		}
+	}
+
+	// Skipping while stopped does nothing, and starting does not move the bar.
+	v.Set(5, a.MainLen())
+	press(a, '6')
+	a.Player.Play()
+	settle()
+	if v.Cursor != 5 || playingPath(t, a) != paths[0] {
+		t.Fatalf("play: cursor=%d playing %s", v.Cursor, playingPath(t, a))
+	}
+	press(a, '6')
+	if v.Cursor != 5 {
+		t.Fatal("the bar must wait until the next song plays")
+	}
+	settle()
+	at(1, "next")
+	v.Set(9, a.MainLen())
+	press(a, '6')
+	settle()
+	at(2, "next from elsewhere")
+	press(a, '4')
+	settle()
+	at(1, "previous")
+
+	// The clickable CD buttons and the media keys use the same path.
+	v.Set(9, a.MainLen())
+	a.Click(keys.CmdPlayNext)
+	settle()
+	at(2, "next button")
+	v.Set(0, a.MainLen())
+	a.PlayPrevious()
+	settle()
+	at(1, "media key previous")
+
+	// A song that follows by itself leaves the bar alone.
+	v.Set(9, a.MainLen())
+	a.Player.Stop()
+	a.Player.Play()
+	settle()
+	if v.Cursor != 9 {
+		t.Fatalf("restart moved the bar to %d", v.Cursor)
+	}
+}
+
+func TestSkipOpensGroupOfPlayingSong(t *testing.T) {
+	a, dir := newTestApp(t)
+	g := playlist.NewGroup("[Album]")
+	a.Root.AddGroup(g)
+	first, second := filepath.Join(dir, "Album/x.mp3"), filepath.Join(dir, "Album/y.mp3")
+	g.AddSong(first)
+	g.AddSong(second)
+	a.AddFiles([]string{filepath.Join(dir, "a.mp3")})
+	a.groupView(a.Root).display = playlist.DisplayPath
+	settle := startPlayer(t, a)
+	a.Player.Play()
+	settle()
+	if a.Cur != a.Root {
+		t.Fatal("starting playback must not change the group")
+	}
+	path := playingPath(t, a)
+	press(a, '6')
+	settle()
+	if a.Cur != g || a.Cur.Item(a.MainView().Cursor).Path != playingPath(t, a) || playingPath(t, a) == path {
+		t.Fatalf("next must open %s at the song: cur=%s cursor=%d", g.Title, a.Cur.Title, a.MainView().Cursor)
+	}
+	if a.groupView(g).display != playlist.DisplayPath {
+		t.Fatal("the opened group keeps the display mode")
+	}
+
+	// In the file manager the group on screen is kept.
+	a.Cur = a.Root
+	press(a, tcell.KeyF1)
+	press(a, '4')
+	settle()
+	if playingPath(t, a) != path || a.Cur != a.Root {
+		t.Fatal("skipping in the file manager must not change the group")
 	}
 }
 

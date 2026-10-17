@@ -120,14 +120,15 @@ func nonNegative(n int) bool { return n >= 0 }
 // keysSection) are handled separately.
 func keywords(o *Options) map[string]keyword {
 	kw := map[string]keyword{
-		"ui.theme":        parsedKw(&o.Theme, ParseTheme),
-		"ui.nerd_font":    boolKw(&o.NerdFont),
-		"ui.mouse":        boolKw(&o.Mouse),
-		"ui.list_width":   parsedKw(&o.ListWidth, listview.ParseWidth),
-		"ui.display_mode": parsedKw(&o.DisplayMode, playlist.ParseDisplayMode),
-		"ui.wrap_around":  boolKw(&o.Wrap),
-		"ui.confirm_quit": boolKw(&o.ConfirmQuit),
-		"ui.pan_size":     numberKw(&o.PanSize, func(n int) bool { return n >= 1 && n <= 40 }),
+		"ui.theme":          parsedKw(&o.Theme, ParseTheme),
+		"ui.nerd_font":      boolKw(&o.NerdFont),
+		"ui.mouse":          boolKw(&o.Mouse),
+		"ui.list_width":     parsedKw(&o.ListWidth, listview.ParseWidth),
+		"ui.display_mode":   parsedKw(&o.DisplayMode, playlist.ParseDisplayMode),
+		"ui.wrap_around":    boolKw(&o.Wrap),
+		"ui.scroll_playing": boolKw(&o.ScrollPlaying),
+		"ui.confirm_quit":   boolKw(&o.ConfirmQuit),
+		"ui.pan_size":       numberKw(&o.PanSize, func(n int) bool { return n >= 1 && n <= 40 }),
 
 		"playback.play_mode":              parsedKw(&o.PlayMode, playback.ParsePlayMode),
 		"playback.media_keys":             boolKw(&o.MediaKeys),
