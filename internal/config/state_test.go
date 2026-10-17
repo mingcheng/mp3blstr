@@ -205,14 +205,14 @@ func TestStateSettingsRoundTrip(t *testing.T) {
 	o.SortMode, o.PlayMode, o.Repeat = filemanager.SortSizeBig, playback.PlaySongs, true
 	o.DisplayMode, o.FileDisplayMode = playlist.DisplayID3, filemanager.DisplayPlain
 	o.FadeOut = true
-	o.ScrollPlaying = false
+	o.ScrollPlaying, o.FollowPlaying = false, false
 	o.Volume, o.Balance = 42, 60
 	o.LastDir, o.LastSong, o.LastPosition = "/music", "/music/a, b #1: 'x'.mp3", 95
 
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	before := Default().StateSettings()
 	changed := ChangedSettings(before, o.StateSettings())
-	if len(changed) != 16 {
+	if len(changed) != 17 {
 		t.Fatalf("changed %v", changed)
 	}
 	if err := SaveSettings(path, changed); err != nil {
@@ -261,6 +261,40 @@ func TestScrollPlayingSetting(t *testing.T) {
 	}
 	if err := Default().Parse(strings.NewReader("ui: {scroll_playing: maybe}")); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestFollowPlayingSetting(t *testing.T) {
+	o := Default()
+	if !o.FollowPlaying {
+		t.Fatal("following the playing song should be enabled by default")
+	}
+	if err := o.Parse(strings.NewReader("ui: {follow_playing: false}")); err != nil {
+		t.Fatal(err)
+	}
+	if o.FollowPlaying {
+		t.Fatal("following the playing song should be disabled by configuration")
+	}
+	if err := Default().Parse(strings.NewReader("ui: {follow_playing: maybe}")); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestFadeInSeconds(t *testing.T) {
+	o := Default()
+	if o.FadeInSeconds != 10 {
+		t.Fatalf("default fade in %d", o.FadeInSeconds)
+	}
+	if err := o.Parse(strings.NewReader("playback: {fade_in_seconds: 3}")); err != nil || o.FadeInSeconds != 3 {
+		t.Fatalf("fade in %d, %v", o.FadeInSeconds, err)
+	}
+	if err := Default().Parse(strings.NewReader("playback: {fade_in_seconds: -1}")); err == nil {
+		t.Fatal("expected error")
+	}
+	for _, s := range o.StateSettings() {
+		if s.Name == "playback.fade_in_seconds" {
+			t.Fatal("fade in duration should not be saved as runtime state")
+		}
 	}
 }
 

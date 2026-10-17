@@ -74,6 +74,8 @@ const (
 	CmdRemoveDuplicates
 	CmdAddPaths
 	CmdToggleScroll
+	CmdSortPlaylist
+	CmdToggleFollow
 )
 
 // Mode is a bit mask of program modes, so a binding can be valid in several.
@@ -145,6 +147,7 @@ var configNames = map[string]Command{
 	"key.helpnext":             CmdHelpNext,
 	"key.clearplaylist":        CmdClearPlaylist,
 	"key.removeduplicates":     CmdRemoveDuplicates,
+	"key.sortplaylist":         CmdSortPlaylist,
 	"key.file.delete":          CmdFileDelete,
 	"key.play.skipend":         CmdPlaySkipEnd,
 	"key.play.nextgroup":       CmdPlayNextGroup,
@@ -162,6 +165,7 @@ var configNames = map[string]Command{
 	"key.toggletheme":          CmdToggleTheme,
 	"key.togglenerdfont":       CmdToggleNerdFont,
 	"key.togglescroll":         CmdToggleScroll,
+	"key.togglefollow":         CmdToggleFollow,
 }
 
 // CommandForConfigName resolves a "key.*" binding name (see configNames).

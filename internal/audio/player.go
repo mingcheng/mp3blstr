@@ -32,6 +32,7 @@ type Options struct {
 	Downsample     bool // halve the sample rate (--downsample)
 	EightBit       bool // reduce to 8 bit resolution (--8bits)
 	FadeSeconds    int  // fade duration at the end of a known-length track
+	FadeInSeconds  int  // fade duration at the start, see Player.FadeIn
 }
 
 // Output owns the audio device. It is safe for concurrent use.
@@ -104,6 +105,7 @@ type Player struct {
 	wake     chan struct{}
 	watched  chan struct{}
 	active   atomic.Bool
+	fadeIn   atomic.Bool // the start of the song fades in
 	errMu    sync.Mutex
 	err      error
 }
@@ -148,12 +150,14 @@ func (o *Output) Open(path string, opts Options) (*Player, error) {
 	if opts.EightBit {
 		s = eightBit(s)
 	}
-	var fadePosition int64
-	s = o.mixer.fadeOut(s, totalFrames, fadeDurationFrames(totalFrames, opts.FadeSeconds), &fadePosition)
+	sourceRate := int64(d.format.SampleRate)
+	position := func() int64 {
+		return int64(src.Position()) * int64(OutputRate) / max(sourceRate, 1)
+	}
+	s = o.mixer.fadeOut(s, totalFrames, fadeDurationFrames(totalFrames, opts.FadeSeconds), position)
 
 	p := &Player{
 		output:   o,
-		pcm:      &pcmReader{src: src, s: o.mixer.Streamer(s), fadePosition: &fadePosition, sourceRate: int64(d.format.SampleRate)},
 		rate:     int(d.format.SampleRate),
 		info:     d.info,
 		seekable: d.seekable,
@@ -163,6 +167,8 @@ func (o *Output) Open(path string, opts Options) (*Player, error) {
 		wake:     make(chan struct{}, 1),
 		watched:  make(chan struct{}),
 	}
+	s = o.mixer.fadeIn(s, fadeInFrames(totalFrames, opts.FadeInSeconds), position, &p.fadeIn)
+	p.pcm = &pcmReader{src: src, s: o.mixer.Streamer(s)}
 	p.out = o.ctx.NewPlayer(p.pcm)
 	go p.watch()
 	return p, nil
@@ -175,6 +181,20 @@ func fadeDurationFrames(total int64, seconds int) int64 {
 	}
 	return duration
 }
+
+// fadeInFrames is the length of the fade in; streams of unknown length
+// (total 0) fade in as well.
+func fadeInFrames(total int64, seconds int) int64 {
+	duration := int64(seconds) * int64(OutputRate)
+	if duration <= 0 || total > 0 && (total < 5*int64(OutputRate) || total < duration) {
+		return 0
+	}
+	return duration
+}
+
+// FadeIn makes the start of the song fade in from silence while fading is
+// enabled (Mixer.SetFade). Call it before Start.
+func (p *Player) FadeIn() { p.fadeIn.Store(true) }
 
 // watch closes Done once the stream ended and oto played all buffered data.
 func (p *Player) watch() {
@@ -357,13 +377,11 @@ func isClosed(ch <-chan struct{}) bool {
 // encodes them as interleaved little endian float32. Seek offsets are sample
 // positions of the decoded source.
 type pcmReader struct {
-	mu           sync.Mutex
-	src          source
-	s            beep.Streamer
-	fadePosition *int64
-	sourceRate   int64
-	buf          [][2]float64
-	eof          bool
+	mu  sync.Mutex
+	src source
+	s   beep.Streamer
+	buf [][2]float64
+	eof bool
 }
 
 func (r *pcmReader) Read(b []byte) (int, error) {
@@ -395,9 +413,6 @@ func (r *pcmReader) Seek(offset int64, _ int) (int64, error) {
 		return offset, err
 	}
 	r.eof = false
-	if r.fadePosition != nil && r.sourceRate > 0 {
-		*r.fadePosition = offset * int64(OutputRate) / r.sourceRate
-	}
 	return offset, nil
 }
 

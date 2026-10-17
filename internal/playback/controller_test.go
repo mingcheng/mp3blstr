@@ -20,6 +20,14 @@ type fakeTrack struct {
 	starts     int
 	seekErr    error
 	unseekable bool
+	fadedIn    bool
+}
+
+func (t *fakeTrack) FadeIn() {
+	if t.starts > 0 {
+		panic("FadeIn after Start")
+	}
+	t.fadedIn = true
 }
 
 func (t *fakeTrack) Start()                { t.paused = false; t.starts++ }
@@ -206,6 +214,131 @@ func TestShuffleAllPlaysEverySongOnce(t *testing.T) {
 	}
 	if len(seen) != 6 {
 		t.Fatalf("played %d songs", len(seen))
+	}
+}
+
+func TestSongsReorderedKeepsPlaying(t *testing.T) {
+	root := playlist.NewGroup("[Default]")
+	for _, s := range []string{"d", "c", "b", "a"} {
+		root.AddSong(s)
+	}
+	h := newHarness(root)
+	h.c.Play()
+	h.settle(t)
+	if current(h.c) != "d" || h.c.NextSongName() != "c" {
+		t.Fatalf("playing %q, next %q", current(h.c), h.c.NextSongName())
+	}
+	root.SortSongs(playlist.SortName, nil)
+	h.c.SongsReordered()
+	if h.c.NextSongName() != "a" || current(h.c) != "d" {
+		t.Fatalf("after sorting: playing %q, next %q", current(h.c), h.c.NextSongName())
+	}
+	var order []string
+	for h.c.track != nil {
+		h.finishSong(t)
+		if h.c.track != nil {
+			order = append(order, current(h.c))
+		}
+	}
+	if strings.Join(order, " ") != "a b c" {
+		t.Fatalf("rest of the playlist played as %v", order)
+	}
+
+	// Random playback still plays every song once after a reorder.
+	h = newHarness(root)
+	h.c.Mode = PlaySongs
+	h.c.Play()
+	h.settle(t)
+	seen := map[string]bool{current(h.c): true}
+	root.ShuffleSongs(h.c.rnd.Shuffle)
+	h.c.SongsReordered()
+	if next := h.c.NextSongName(); next == "" || seen[next] {
+		t.Fatalf("random next song %q", next)
+	}
+	for {
+		h.finishSong(t)
+		if h.c.track == nil {
+			break
+		}
+		if seen[current(h.c)] {
+			t.Fatalf("%s played twice", current(h.c))
+		}
+		seen[current(h.c)] = true
+	}
+	if len(seen) != 4 {
+		t.Fatalf("played %d songs", len(seen))
+	}
+
+	// Without playback there is no next song to show.
+	h = newHarness(root)
+	h.c.SongsReordered()
+	if h.c.NextSongName() != "" {
+		t.Fatal("stopped player shows no next song")
+	}
+}
+
+// Only a song that follows the previous one by itself fades in.
+func TestFadeInAfterAutomaticChange(t *testing.T) {
+	root := playlist.NewGroup("[Default]")
+	for _, s := range []string{"a", "b", "c", "d", "e"} {
+		root.AddSong(s)
+	}
+	h := newHarness(root)
+	fadedIn := func() bool { return h.c.track.(*fakeTrack).fadedIn }
+	h.c.Play()
+	h.settle(t)
+	if fadedIn() {
+		t.Fatal("starting playback must not fade in")
+	}
+	h.finishSong(t)
+	if current(h.c) != "b" || !fadedIn() {
+		t.Fatal("the song that follows by itself fades in")
+	}
+	h.c.Next()
+	h.settle(t)
+	if current(h.c) != "c" || fadedIn() {
+		t.Fatal("skipping must not fade in")
+	}
+	h.c.Previous()
+	h.settle(t)
+	if fadedIn() {
+		t.Fatal("going back must not fade in")
+	}
+
+	// A song that cannot be opened is skipped; the next one still fades in.
+	h.finishSong(t) // c
+	h.finishSong(t) // d
+	h.c.Next()      // e, the last song
+	h.settle(t)
+	h.c.Repeat = true
+	h.b.err = errors.New("broken")
+	tr := h.c.track.(*fakeTrack)
+	close(tr.done)
+	(<-h.queue)() // finished: e ended by itself
+	h.b.err = nil
+	for h.c.track == nil {
+		(<-h.queue)()
+	}
+	if !fadedIn() {
+		t.Fatalf("after a failed song and a playlist repeat, %q must fade in", current(h.c))
+	}
+
+	// Repeating a track by itself fades it in again.
+	h.c.RepeatTrack = true
+	h.finishSong(t)
+	if !fadedIn() {
+		t.Fatal("a repeated track fades in")
+	}
+
+	// After the playlist ended, starting it again does not fade in.
+	h.c.Repeat, h.c.RepeatTrack = false, false
+	for h.c.track != nil {
+		h.finishSong(t)
+	}
+	h.c.Play()
+	h.settle(t)
+	if fadedIn() {
+		t.Fatal("restarting a finished playlist must not fade in")
 	}
 }
 

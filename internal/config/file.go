@@ -127,6 +127,7 @@ func keywords(o *Options) map[string]keyword {
 		"ui.display_mode":   parsedKw(&o.DisplayMode, playlist.ParseDisplayMode),
 		"ui.wrap_around":    boolKw(&o.Wrap),
 		"ui.scroll_playing": boolKw(&o.ScrollPlaying),
+		"ui.follow_playing": boolKw(&o.FollowPlaying),
 		"ui.confirm_quit":   boolKw(&o.ConfirmQuit),
 		"ui.pan_size":       numberKw(&o.PanSize, func(n int) bool { return n >= 1 && n <= 40 }),
 
@@ -137,6 +138,7 @@ func keywords(o *Options) map[string]keyword {
 		"playback.repeat":                 boolKw(&o.Repeat),
 		"playback.fade_out":               boolKw(&o.FadeOut),
 		"playback.fade_seconds":           numberKw(&o.FadeSeconds, nonNegative),
+		"playback.fade_in_seconds":        numberKw(&o.FadeInSeconds, nonNegative),
 		"playback.threads": {typ: typeNumber, apply: func(v []string) error {
 			n, _ := strconv.Atoi(v[0])
 			if !o.SetThreads(n) {

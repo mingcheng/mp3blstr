@@ -12,6 +12,9 @@ type backend struct {
 	opts *config.Options
 }
 
+// The player fades in songs that follow the previous one by themselves.
+var _ playback.FadeInTrack = (*audio.Player)(nil)
+
 // Opener implements playback.Backend. The audio options are read when a
 // song is opened, so run-time changes (such as the read-ahead size cycled
 // with F10) apply to the next song.
@@ -21,6 +24,7 @@ func (b *backend) Opener(path string) func() (playback.Track, error) {
 		Downsample:     b.opts.Downsample,
 		EightBit:       b.opts.EightBits,
 		FadeSeconds:    b.opts.FadeSeconds,
+		FadeInSeconds:  b.opts.FadeInSeconds,
 	}
 	return func() (playback.Track, error) {
 		p, err := b.out.Open(path, o)

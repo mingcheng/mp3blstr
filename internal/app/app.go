@@ -97,6 +97,7 @@ type Row struct {
 type groupView struct {
 	state   listview.State
 	display playlist.DisplayMode
+	sort    playlist.SortMode // order of the next "sort playlist"
 }
 
 // helpBarRows is the height of the key overview at the top of the screen.
@@ -149,7 +150,9 @@ type App struct {
 	mainWidth     int    // columns of the main window, for panning
 	marquee       int    // scroll steps of the playing song's name
 	marqueeTrack  int    // Player.TrackID the steps belong to
-	locate        bool   // show the next song that starts in the playlist
+	locate        bool   // the user skipped: show the next song that starts
+	followTrack   int    // Player.TrackID of the last song that started
+	followPath    string // that song; "" after playback stopped
 	durations     map[string]int
 	durationQueue []string
 	durationBusy  bool
@@ -259,14 +262,14 @@ func (a *App) playerChanged() {
 	if id := a.Player.TrackID(); id != a.marqueeTrack {
 		a.marqueeTrack, a.marquee = id, 0
 	}
-	if a.locate {
-		switch {
-		case a.Player.HasSong():
-			a.locate = false
-			a.locatePlaying()
-		case !a.Player.Playing():
-			a.locate = false
+	switch {
+	case a.Player.HasSong():
+		if id := a.Player.TrackID(); id != a.followTrack {
+			a.followTrack = id
+			a.songStarted()
 		}
+	case !a.Player.Playing():
+		a.followPath, a.locate = "", false
 	}
 	if a.statusFile == "" {
 		return
@@ -290,10 +293,33 @@ func (a *App) PlayNext() { a.skip(a.Player.Next) }
 func (a *App) PlayPrevious() { a.skip(a.Player.Previous) }
 
 // skip runs a song skip of the player and, when a new song is being opened,
-// moves the selection bar to it as soon as it plays (see playerChanged).
+// moves the selection bar to it as soon as it plays (see songStarted).
 func (a *App) skip(f func()) {
 	f()
 	a.locate = a.Player.Playing() && !a.Player.HasSong()
+}
+
+// songStarted makes the selection bar follow the playing song
+// (ui.follow_playing): after a skip, when playback starts, and when the
+// bar was on the song that played before. A bar moved elsewhere is left
+// alone, so browsing the playlist is not disturbed.
+func (a *App) songStarted() {
+	prev := a.followPath
+	a.followPath, _, _ = a.Player.SongInfo()
+	skipped := a.locate
+	a.locate = false
+	if !a.Opts.FollowPlaying {
+		return
+	}
+	if skipped || prev == "" || a.barOn(prev) {
+		a.locatePlaying()
+	}
+}
+
+// barOn reports whether the selection bar of the playlist is on song path.
+func (a *App) barOn(path string) bool {
+	it := a.Cur.Item(a.groupView(a.Cur).state.Cursor)
+	return it != nil && it.Kind == playlist.KindSong && it.Path == path
 }
 
 // locatePlaying moves the selection bar of the playlist to the song being

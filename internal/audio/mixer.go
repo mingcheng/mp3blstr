@@ -94,31 +94,59 @@ func (m *Mixer) SetDevice(dev, v int) {
 	m.mu.Unlock()
 }
 
-// SetFade enables or disables end-of-track fading without changing master volume.
+// SetFade enables or disables fading (the end of tracks, and the start of
+// tracks that follow by themselves) without changing master volume.
 func (m *Mixer) SetFade(enabled bool) { m.fade.Store(enabled) }
 
-// Fade reports whether end-of-track fading is enabled.
+// Fade reports whether fading is enabled.
 func (m *Mixer) Fade() bool { return m.fade.Load() }
 
 // fadeOut attenuates the final duration frames of a stream of known length.
-func (m *Mixer) fadeOut(s beep.Streamer, total, duration int64, position *int64) beep.Streamer {
+// position returns the output frame of the song that s produces next. It
+// follows the decoded source rather than counting the frames handed out, so
+// seeking moves the fade along and silence padded in on buffer underruns
+// does not bring it forward.
+func (m *Mixer) fadeOut(s beep.Streamer, total, duration int64, position func() int64) beep.Streamer {
 	if total <= 0 || duration <= 0 {
 		return s
 	}
 	start := max(int64(0), total-duration)
 	step := 1 / float64(total-start)
 	return beep.StreamerFunc(func(samples [][2]float64) (int, bool) {
+		pos := position()
 		n, ok := s.Stream(samples)
-		if m.Fade() && *position+int64(n) > start {
-			first := int(max(int64(0), start-*position))
-			gain := float64(max(int64(0), total-(*position+int64(first)))) * step
+		if m.Fade() && pos+int64(n) > start {
+			first := int(max(int64(0), start-pos))
+			gain := float64(max(int64(0), total-(pos+int64(first)))) * step
 			for i := first; i < n; i++ {
 				samples[i][0] *= gain
 				samples[i][1] *= gain
 				gain = max(0, gain-step)
 			}
 		}
-		*position += int64(n)
+		return n, ok
+	})
+}
+
+// fadeIn raises the first duration frames of a stream from silence, once
+// armed is set (the song follows the previous one by itself). Like fadeOut,
+// it follows the position in the song.
+func (m *Mixer) fadeIn(s beep.Streamer, duration int64, position func() int64, armed *atomic.Bool) beep.Streamer {
+	if duration <= 0 {
+		return s
+	}
+	step := 1 / float64(duration)
+	return beep.StreamerFunc(func(samples [][2]float64) (int, bool) {
+		pos := position()
+		n, ok := s.Stream(samples)
+		if armed.Load() && m.Fade() && pos < duration {
+			gain := float64(max(pos, 0)) * step
+			for i := 0; i < n && pos+int64(i) < duration; i++ {
+				samples[i][0] *= gain
+				samples[i][1] *= gain
+				gain += step
+			}
+		}
 		return n, ok
 	})
 }

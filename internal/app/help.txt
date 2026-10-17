@@ -137,6 +137,17 @@ REMOVE DUPLICATES
   keeping the first occurrence. This only works when nothing
   is playing. Press D in Normal Mode.
 
+SORT PLAYLIST
+  Sort the songs of the group on screen. Each press uses the
+  next order: name, artist (then album and title), title,
+  duration (shortest first), size (smallest first), shuffle,
+  then name again. Names are compared case-insensitively
+  with numbers by value ("2" before "10"); songs without
+  the value (no tag, streams) come last. Sub groups stay at
+  the top. Tags, lengths and sizes are read in the
+  background (Esc cancels). During playback the songs not
+  played yet follow the new order. Press o in Normal Mode.
+
 MOVE FILES AFTER / MOVE FILES BEFORE
   Move the selected songs after (or before) the highlighted
   entry, in the order in which they were selected. Songs
@@ -231,9 +242,12 @@ REWIND/FORWARD      Skip SkipLength seconds (default 10).
 SKIP TO END SONG    Jump to the last seconds of the song.
 PREVIOUS/NEXT GROUP
                    Skip the rest of the group being played.
-TOGGLE FADE OUT     Fade out the end of known-length songs (V).
-                   The length is set by playback.fade_seconds
-                   in the configuration file (default 5).
+TOGGLE FADE IN/OUT  Fade out the end of known-length songs (V)
+                   and fade in the song that follows by
+                   itself (not after previous/next). The
+                   lengths are set by playback.fade_seconds
+                   (default 5) and playback.fade_in_seconds
+                   (default 10) in the configuration file.
 START SEARCH       Type the beginning of a name to jump to
                    it. The search ends after 2 seconds of
                    inactivity or with ENTER / ESC.
@@ -258,6 +272,15 @@ MIXERVOLUME DOWN/UP
 PAN WINDOW LEFT/RIGHT
                    Scroll long names horizontally.
 TOGGLE LIST WRAP   Wrap around at the ends of lists.
+FOLLOW PLAYING SONG
+                   Move the playlist selection bar to the
+                   song being played, opening its group:
+                   after previous/next, when playback
+                   starts, and when the next song starts
+                   while the bar is on the last one. A bar
+                   moved elsewhere is left alone until you
+                   skip. Default on; ui.follow_playing
+                   sets it.
 SWITCH THEME       Cycle through the colour themes (classic,
                    modern) at runtime.
 TOGGLE NERD FONT   Switch between plain symbols and Nerd

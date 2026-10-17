@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -77,10 +78,24 @@ func (t *fakeTrack) SeekFromEnd(int) error { return nil }
 func (t *fakeTrack) Seekable() bool        { return false }
 func (t *fakeTrack) Err() error            { return nil }
 
-type okBackend struct{}
+// okBackend opens every song; with rec set it remembers the last track.
+type okBackend struct{ rec *trackRecorder }
 
-func (okBackend) Opener(string) func() (playback.Track, error) {
-	return func() (playback.Track, error) { return &fakeTrack{done: make(chan struct{})}, nil }
+type trackRecorder struct {
+	mu   sync.Mutex
+	last *fakeTrack
+}
+
+func (b okBackend) Opener(string) func() (playback.Track, error) {
+	return func() (playback.Track, error) {
+		tr := &fakeTrack{done: make(chan struct{})}
+		if b.rec != nil {
+			b.rec.mu.Lock()
+			b.rec.last = tr
+			b.rec.mu.Unlock()
+		}
+		return tr, nil
+	}
 }
 
 type noBackend struct{}
@@ -289,16 +304,18 @@ func TestScrollPlayingName(t *testing.T) {
 	}
 }
 
-// startPlayer replaces the player with one whose songs open successfully
-// and returns a function that runs the UI loop until a song plays.
-func startPlayer(t *testing.T, a *App) (settle func()) {
+// startPlayer replaces the player with one whose songs open successfully.
+// settle runs the UI loop until a song plays; finish ends the playing song
+// as if it had been played completely and waits for the next one.
+func startPlayer(t *testing.T, a *App) (settle, finish func()) {
 	t.Helper()
-	a.Player = playback.New(a.Root, okBackend{}, a.view.Post, (*listener)(a))
+	rec := &trackRecorder{}
+	a.Player = playback.New(a.Root, okBackend{rec: rec}, a.view.Post, (*listener)(a))
 	a.Player.Mode = a.Opts.PlayMode
-	return func() {
+	wait := func(done func() bool) {
 		t.Helper()
 		deadline := time.Now().Add(5 * time.Second)
-		for !a.Player.HasSong() {
+		for !done() {
 			if time.Now().After(deadline) {
 				t.Fatal("song did not start")
 			}
@@ -306,6 +323,21 @@ func startPlayer(t *testing.T, a *App) (settle func()) {
 			time.Sleep(time.Millisecond)
 		}
 	}
+	settle = func() {
+		t.Helper()
+		wait(a.Player.HasSong)
+	}
+	finish = func() {
+		t.Helper()
+		id := a.Player.TrackID()
+		rec.mu.Lock()
+		close(rec.last.done)
+		rec.mu.Unlock()
+		wait(func() bool {
+			return (a.Player.HasSong() && a.Player.TrackID() != id) || !a.Player.Playing()
+		})
+	}
+	return settle, finish
 }
 
 func playingPath(t *testing.T, a *App) string {
@@ -324,7 +356,7 @@ func TestSkipLocatesPlayingSong(t *testing.T) {
 		paths = append(paths, filepath.Join(dir, string(rune('a'+i))+".mp3"))
 	}
 	a.AddFiles(paths)
-	settle := startPlayer(t, a)
+	settle, _ := startPlayer(t, a)
 	v := a.MainView()
 	v.SetRows(3, a.MainLen())
 	at := func(want int, what string) {
@@ -337,16 +369,17 @@ func TestSkipLocatesPlayingSong(t *testing.T) {
 		}
 	}
 
-	// Skipping while stopped does nothing, and starting does not move the bar.
+	// Skipping while stopped does nothing.
 	v.Set(5, a.MainLen())
 	press(a, '6')
+	if a.Player.Playing() || v.Cursor != 5 {
+		t.Fatal("skipping while stopped")
+	}
 	a.Player.Play()
 	settle()
-	if v.Cursor != 5 || playingPath(t, a) != paths[0] {
-		t.Fatalf("play: cursor=%d playing %s", v.Cursor, playingPath(t, a))
-	}
+	at(0, "start")
 	press(a, '6')
-	if v.Cursor != 5 {
+	if v.Cursor != 0 {
 		t.Fatal("the bar must wait until the next song plays")
 	}
 	settle()
@@ -368,15 +401,81 @@ func TestSkipLocatesPlayingSong(t *testing.T) {
 	a.PlayPrevious()
 	settle()
 	at(1, "media key previous")
+}
 
-	// A song that follows by itself leaves the bar alone.
-	v.Set(9, a.MainLen())
-	a.Player.Stop()
+func TestFollowPlayingSong(t *testing.T) {
+	a, dir := newTestApp(t)
+	var paths []string
+	for i := range 20 {
+		paths = append(paths, filepath.Join(dir, string(rune('a'+i))+".mp3"))
+	}
+	a.AddFiles(paths)
+	settle, finish := startPlayer(t, a)
+	v := a.MainView()
+	v.SetRows(3, a.MainLen())
+	on := func(what string) {
+		t.Helper()
+		if a.Cur.Item(v.Cursor).Path != playingPath(t, a) || v.Cursor < v.Offset || v.Cursor >= v.Offset+v.Rows {
+			t.Fatalf("%s: cursor=%d offset=%d, playing %s", what, v.Cursor, v.Offset, playingPath(t, a))
+		}
+	}
+
+	// Starting playback shows the first song; the bar then follows the
+	// songs that come after it by themselves.
+	v.Set(5, a.MainLen())
 	a.Player.Play()
 	settle()
-	if v.Cursor != 9 {
-		t.Fatalf("restart moved the bar to %d", v.Cursor)
+	on("start")
+	for range 4 {
+		finish()
+		on("next song by itself")
 	}
+
+	// A bar moved elsewhere is left alone until the user skips.
+	v.Set(9, a.MainLen())
+	finish()
+	if v.Cursor != 9 {
+		t.Fatalf("browsing: the bar moved to %d", v.Cursor)
+	}
+	press(a, '6')
+	settle()
+	on("skip")
+	finish()
+	on("following again")
+
+	// Playing a song with Enter keeps following from there.
+	v.Set(8, a.MainLen())
+	press(a, tcell.KeyEnter)
+	settle()
+	on("enter")
+	finish()
+	on("after enter")
+
+	// L turns following off: nothing moves the bar, not even a skip.
+	press(a, 'L')
+	if a.Opts.FollowPlaying || a.Msg.Text != "Not following the playing song" {
+		t.Fatalf("L: %v %q", a.Opts.FollowPlaying, a.Msg.Text)
+	}
+	bar := v.Cursor
+	finish()
+	press(a, '6')
+	settle()
+	if v.Cursor != bar {
+		t.Fatalf("following off: the bar moved to %d", v.Cursor)
+	}
+	v.Set(0, a.MainLen())
+	press(a, 'L')
+	if !a.Opts.FollowPlaying || a.Msg.Text != "Following the playing song" {
+		t.Fatalf("L: %v %q", a.Opts.FollowPlaying, a.Msg.Text)
+	}
+	on("turned on")
+
+	// After a stop, the next start is shown again.
+	a.Player.Stop()
+	v.Set(9, a.MainLen())
+	a.Player.Play()
+	settle()
+	on("restart")
 }
 
 func TestSkipOpensGroupOfPlayingSong(t *testing.T) {
@@ -386,31 +485,180 @@ func TestSkipOpensGroupOfPlayingSong(t *testing.T) {
 	first, second := filepath.Join(dir, "Album/x.mp3"), filepath.Join(dir, "Album/y.mp3")
 	g.AddSong(first)
 	g.AddSong(second)
-	a.AddFiles([]string{filepath.Join(dir, "a.mp3")})
+	single := filepath.Join(dir, "a.mp3")
+	a.AddFiles([]string{single})
 	a.groupView(a.Root).display = playlist.DisplayPath
-	settle := startPlayer(t, a)
+	settle, finish := startPlayer(t, a)
 	a.Player.Play()
 	settle()
-	if a.Cur != a.Root {
-		t.Fatal("starting playback must not change the group")
-	}
-	path := playingPath(t, a)
-	press(a, '6')
-	settle()
-	if a.Cur != g || a.Cur.Item(a.MainView().Cursor).Path != playingPath(t, a) || playingPath(t, a) == path {
-		t.Fatalf("next must open %s at the song: cur=%s cursor=%d", g.Title, a.Cur.Title, a.MainView().Cursor)
+	if a.Cur != g || playingPath(t, a) != first || a.Cur.Item(a.MainView().Cursor).Path != first {
+		t.Fatalf("starting playback must open %s at %s: cur=%s", g.Title, first, a.Cur.Title)
 	}
 	if a.groupView(g).display != playlist.DisplayPath {
 		t.Fatal("the opened group keeps the display mode")
 	}
+	press(a, '6')
+	settle()
+	if a.Cur != g || playingPath(t, a) != second || a.Cur.Item(a.MainView().Cursor).Path != second {
+		t.Fatalf("next must show %s: cur=%s cursor=%d", second, a.Cur.Title, a.MainView().Cursor)
+	}
+	// The group played next is opened when the bar followed the last song.
+	finish()
+	if a.Cur != a.Root || playingPath(t, a) != single || a.Cur.Item(a.MainView().Cursor).Path != single {
+		t.Fatalf("the playlist must follow into %s: cur=%s", a.Root.Title, a.Cur.Title)
+	}
 
 	// In the file manager the group on screen is kept.
-	a.Cur = a.Root
 	press(a, tcell.KeyF1)
 	press(a, '4')
 	settle()
-	if playingPath(t, a) != path || a.Cur != a.Root {
+	if playingPath(t, a) != second || a.Cur != a.Root {
 		t.Fatal("skipping in the file manager must not change the group")
+	}
+}
+
+// writeWAV creates a silent 8 kHz mono WAV file of the given length.
+func writeWAV(t *testing.T, path string, seconds int) {
+	t.Helper()
+	size := 16000 * seconds
+	data := make([]byte, 44+size)
+	copy(data, "RIFF")
+	binary.LittleEndian.PutUint32(data[4:], uint32(len(data)-8))
+	copy(data[8:], "WAVEfmt ")
+	binary.LittleEndian.PutUint32(data[16:], 16)
+	binary.LittleEndian.PutUint16(data[20:], 1)
+	binary.LittleEndian.PutUint16(data[22:], 1)
+	binary.LittleEndian.PutUint32(data[24:], 8000)
+	binary.LittleEndian.PutUint32(data[28:], 16000)
+	binary.LittleEndian.PutUint16(data[32:], 2)
+	binary.LittleEndian.PutUint16(data[34:], 16)
+	copy(data[36:], "data")
+	binary.LittleEndian.PutUint32(data[40:], uint32(size))
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSortPlaylistCycle(t *testing.T) {
+	a, dir := newTestApp(t)
+	p := func(name string) string { return filepath.Join(dir, name) }
+	writeID3(t, p("x1.mp3"), "Zed", "Alpha")  // smallest file
+	writeID3(t, p("x2.mp3"), "Abba", "Omega") // one byte larger
+	writeWAV(t, p("long.wav"), 3)
+	writeWAV(t, p("short.wav"), 1)
+	sub := playlist.NewGroup("[Sub]")
+	a.Root.AddGroup(sub)
+	a.AddFiles([]string{p("x1.mp3"), p("short.wav"), p("x2.mp3"), p("long.wav")})
+	a.MainView().Set(2, a.MainLen()) // short.wav
+	order := func() []string {
+		var out []string
+		for _, it := range a.Root.Items {
+			if it.Kind == playlist.KindSong {
+				out = append(out, filepath.Base(it.Path))
+			}
+		}
+		return out
+	}
+
+	for _, c := range []struct {
+		mode string
+		want []string
+	}{
+		{"name", []string{"long.wav", "short.wav", "x1.mp3", "x2.mp3"}},
+		{"artist", []string{"x2.mp3", "x1.mp3", "long.wav", "short.wav"}},
+		{"title", []string{"x1.mp3", "long.wav", "x2.mp3", "short.wav"}},
+		{"duration", []string{"short.wav", "long.wav", "x1.mp3", "x2.mp3"}},
+		{"size", []string{"x1.mp3", "x2.mp3", "short.wav", "long.wav"}},
+	} {
+		press(a, 'o')
+		waitTask(t, a)
+		if got := order(); !slices.Equal(got, c.want) {
+			t.Fatalf("%s:\n got %q\nwant %q", c.mode, got, c.want)
+		}
+		if a.Root.Item(0).Group != sub {
+			t.Fatalf("%s: the sub group must stay at the top", c.mode)
+		}
+		if a.Cur.Item(a.MainView().Cursor).Path != p("short.wav") {
+			t.Fatalf("%s: the selection bar must stay on its song", c.mode)
+		}
+		if !strings.HasPrefix(a.Msg.Text, "Playlist sorted by "+c.mode+"; press 'o' for ") {
+			t.Fatalf("%s: message %q", c.mode, a.Msg.Text)
+		}
+	}
+	if a.durations[p("long.wav")] != 3 {
+		t.Fatal("sorting by duration must fill in the displayed lengths")
+	}
+	press(a, 'o')
+	if got := order(); len(got) != 4 || a.Msg.Text != "Playlist shuffled; press 'o' for name" {
+		t.Fatalf("shuffle: %q %q", got, a.Msg.Text)
+	}
+	got := order()
+	slices.Sort(got)
+	if !slices.Equal(got, []string{"long.wav", "short.wav", "x1.mp3", "x2.mp3"}) {
+		t.Fatalf("shuffle lost songs: %q", got)
+	}
+	press(a, 'o')
+	if got := order(); !slices.Equal(got, []string{"long.wav", "short.wav", "x1.mp3", "x2.mp3"}) {
+		t.Fatalf("the cycle starts over with name: %q", got)
+	}
+
+	// Each group keeps its own place in the cycle; the file manager has no
+	// playlist sort.
+	a.MainView().Set(0, a.MainLen())
+	press(a, tcell.KeyEnter)
+	if a.Cur != sub {
+		t.Fatal("enter sub group")
+	}
+	sub.AddSong(p("x1.mp3"))
+	press(a, 'o')
+	if !strings.Contains(a.Msg.Text, "sorted by name") {
+		t.Fatalf("sub group starts with name: %q", a.Msg.Text)
+	}
+	press(a, tcell.KeyF1, 'o')
+	if a.Task != nil || a.Mode != keys.ModeFileSelection {
+		t.Fatal("o must not sort in the file manager")
+	}
+}
+
+func TestSortPlaylistCancel(t *testing.T) {
+	a, dir := newTestApp(t)
+	paths := []string{filepath.Join(dir, "b.mp3"), filepath.Join(dir, "a.mp3")}
+	a.AddFiles(paths)
+	a.groupView(a.Root).sort = playlist.SortSize
+	press(a, 'o')
+	if a.Task == nil {
+		t.Fatal("sorting by size runs as a task")
+	}
+	press(a, tcell.KeyEsc)
+	a.view.(*fakeView).runPosted()
+	time.Sleep(10 * time.Millisecond)
+	a.view.(*fakeView).runPosted()
+	if a.Root.Item(0).Path != paths[0] || a.groupView(a.Root).sort != playlist.SortSize {
+		t.Fatal("a cancelled sort changes nothing")
+	}
+}
+
+func TestSortWhilePlaying(t *testing.T) {
+	a, dir := newTestApp(t)
+	var paths []string
+	for _, name := range []string{"d.mp3", "c.mp3", "b.mp3", "a.mp3"} {
+		paths = append(paths, filepath.Join(dir, name))
+	}
+	a.AddFiles(paths)
+	settle, _ := startPlayer(t, a)
+	a.Player.Play()
+	settle()
+	if playingPath(t, a) != paths[0] || a.Player.NextSongName() != "c.mp3" {
+		t.Fatalf("playing %s, next %s", playingPath(t, a), a.Player.NextSongName())
+	}
+	press(a, 'o') // by name: a b c d
+	if a.Player.NextSongName() != "a.mp3" {
+		t.Fatalf("the songs not played yet follow the new order, next %s", a.Player.NextSongName())
+	}
+	press(a, '6')
+	settle()
+	if playingPath(t, a) != paths[3] {
+		t.Fatalf("playing %s", playingPath(t, a))
 	}
 }
 
@@ -724,8 +972,8 @@ func TestRepeatShuffleAndHelpBarCategories(t *testing.T) {
 	}
 
 	lines := a.HelpBarLines()
-	if lines[0][0].Desc != "Select Files" || lines[3][0].Desc != "Delete" || len(lines[3]) != 2 ||
-		lines[3][1].Cmd != keys.CmdAddPaths {
+	if lines[0][0].Desc != "Select Files" || lines[2][1].Cmd != keys.CmdSortPlaylist ||
+		lines[3][1].Desc != "Delete" || len(lines[3]) != 3 || lines[3][2].Cmd != keys.CmdAddPaths {
 		t.Fatal("each category should start on a new line")
 	}
 	if lines[4][0].Cmd != keys.CmdToggleRepeat || lines[4][1].Cmd != keys.CmdToggleShuffle {
@@ -749,11 +997,11 @@ func TestFadeOutWithoutVisibleMixer(t *testing.T) {
 		t.Fatal("fade should start disabled without a visible mixer")
 	}
 	a.HandleKey(keys.FromEvent(tcell.NewEventKey(tcell.KeyRune, 'V', tcell.ModShift)))
-	if !opts.FadeOut || !gains.Fade() || a.Msg.Text != "Fade out enabled" {
+	if !opts.FadeOut || !gains.Fade() || a.Msg.Text != "Fade in/out enabled" {
 		t.Fatalf("toggle on: enabled=%v mixer=%v message=%q", opts.FadeOut, gains.Fade(), a.Msg.Text)
 	}
 	a.HandleKey(keys.FromEvent(tcell.NewEventKey(tcell.KeyRune, 'V', tcell.ModShift)))
-	if opts.FadeOut || gains.Fade() || a.Msg.Text != "Fade out disabled" {
+	if opts.FadeOut || gains.Fade() || a.Msg.Text != "Fade in/out disabled" {
 		t.Fatalf("toggle off: enabled=%v mixer=%v message=%q", opts.FadeOut, gains.Fade(), a.Msg.Text)
 	}
 }

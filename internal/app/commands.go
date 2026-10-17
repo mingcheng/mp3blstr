@@ -106,6 +106,14 @@ func (a *App) Exec(cmd keys.Command) {
 		} else {
 			a.SetMessage("Scrolling of the playing song disabled")
 		}
+	case keys.CmdToggleFollow:
+		a.Opts.FollowPlaying = !a.Opts.FollowPlaying
+		if a.Opts.FollowPlaying {
+			a.SetMessage("Following the playing song")
+			a.locatePlaying()
+		} else {
+			a.SetMessage("Not following the playing song")
+		}
 	case keys.CmdToggleTheme:
 		a.Opts.Theme = config.NextTheme(a.Opts.Theme)
 		a.SetMessage("Theme: " + a.Opts.Theme)
@@ -187,9 +195,9 @@ func (a *App) Exec(cmd keys.Command) {
 			a.fadeMixer.SetFade(a.Opts.FadeOut)
 		}
 		if a.Opts.FadeOut {
-			a.SetMessage("Fade out enabled")
+			a.SetMessage("Fade in/out enabled")
 		} else {
-			a.SetMessage("Fade out disabled")
+			a.SetMessage("Fade in/out disabled")
 		}
 	case keys.CmdToggleShuffle:
 		a.SetShuffle(!a.Cur.Shuffle)
@@ -225,6 +233,8 @@ func (a *App) Exec(cmd keys.Command) {
 			p.ResetNextSong()
 		}
 		a.SetMessage(fmt.Sprintf("Removed %d duplicate files", removed))
+	case keys.CmdSortPlaylist:
+		a.sortPlaylist()
 	case keys.CmdHelpPrev:
 		a.HelpBar.PageUp(len(a.HelpBarLines()))
 	case keys.CmdHelpNext:

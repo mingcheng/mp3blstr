@@ -43,6 +43,7 @@ type Options struct {
 	Repeat              bool
 	FadeOut             bool
 	FadeSeconds         int // seconds of end-of-track fade, set in config only
+	FadeInSeconds       int // seconds of fade in after an automatic song change, config only
 	SkipSeconds         int // seconds skipped by forward/rewind
 	PanSize             int // columns panned by left/right
 	Debug               bool
@@ -64,6 +65,7 @@ type Options struct {
 	ScanMP3               bool
 	Wrap                  bool
 	ScrollPlaying         bool // scroll the name of the playing song (marquee)
+	FollowPlaying         bool // move the playlist selection bar to the playing song
 
 	// Colours maps the ui.colors settings, as lower case "popupinput.fg"
 	// style names without underscores, to colour names.
@@ -100,6 +102,7 @@ func Default() *Options {
 		PauseOnSleep:          true,
 		PauseOnOutputChange:   true,
 		FadeSeconds:           5,
+		FadeInSeconds:         10,
 		SkipSeconds:           10,
 		PanSize:               5,
 		DisplayMode:           playlist.DisplayFileName,
@@ -111,6 +114,7 @@ func Default() *Options {
 		SelectCaseInsensitive: true,
 		Wrap:                  true,
 		ScrollPlaying:         true,
+		FollowPlaying:         true,
 		Colours:               map[string]string{},
 		Theme:                 Themes[0],
 		Mouse:                 true,

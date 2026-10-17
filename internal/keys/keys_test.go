@@ -121,6 +121,19 @@ func TestToggleScrollKey(t *testing.T) {
 	}
 }
 
+func TestToggleFollowKey(t *testing.T) {
+	tb := Default()
+	for _, m := range []Mode{ModeNormal, ModeFileSelection, ModeHelp} {
+		if tb.Lookup(Rune('L'), m) != CmdToggleFollow {
+			t.Fatalf("L must toggle following the playing song in mode %d", m)
+		}
+	}
+	cmd, ok := CommandForConfigName("key.togglefollow")
+	if !ok || cmd != CmdToggleFollow {
+		t.Fatal("key.togglefollow must rebind the follow toggle")
+	}
+}
+
 func TestGroupedHelpBar(t *testing.T) {
 	tb := Default()
 	groups := tb.Grouped(ModeNormal, true)

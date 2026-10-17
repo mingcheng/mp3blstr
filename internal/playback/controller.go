@@ -92,7 +92,7 @@ const (
 )
 
 // Track is a song opened by the Backend. Its methods are called on the UI
-// goroutine.
+// goroutine. A Track may also implement FadeInTrack.
 type Track interface {
 	Start()                     // start or resume playback
 	Pause()                     // pause playback
@@ -104,6 +104,13 @@ type Track interface {
 	SeekFromEnd(secs int) error // jump to secs seconds before the end
 	Seekable() bool             // whether the opened source supports seeking
 	Err() error                 // the error that ended playback (after Stop)
+}
+
+// FadeInTrack is implemented by tracks that can fade in at their start. The
+// controller calls FadeIn before Start when the song follows the previous
+// one by itself.
+type FadeInTrack interface {
+	FadeIn()
 }
 
 // Backend opens songs. Errors should wrap a media.SoundError; wrapping
@@ -160,6 +167,7 @@ type Controller struct {
 	oneMp3      string        // song requested by PlayOne, not started yet
 	single      single
 	allowRepeat bool // the last song ended normally; Repeat may restart the list
+	fadeIn      bool // the next song to start follows the last one by itself
 	history     History
 	nextSong    int             // precomputed index of the next unplayed song, -1 if none
 	playingGrp  *playlist.Group // group whose songs are being played
@@ -516,6 +524,17 @@ func (c *Controller) ResetNextSong() {
 	c.changed()
 }
 
+// SongsReordered updates the next song shown after songs of the playlist
+// changed places. The precomputed choice is a position among the unplayed
+// songs, so in-order playback continues with the first unplayed song of the
+// new order and random playback with a random one.
+func (c *Controller) SongsReordered() {
+	if c.nextSong > -1 {
+		c.updateNextName()
+	}
+	c.changed()
+}
+
 // ResetPlaylist marks every song and group as unplayed.
 func (c *Controller) ResetPlaylist() {
 	c.clearResume()
@@ -560,6 +579,7 @@ func (c *Controller) advance() {
 			return
 		}
 		allow := c.allowRepeat
+		fadeIn := c.fadeIn
 		c.stopList()
 		if c.QuitAfterPlaylist {
 			c.listener.EndOfPlaylistQuit()
@@ -570,6 +590,7 @@ func (c *Controller) advance() {
 		}
 		c.resetPlaylist(true)
 		c.playing = true
+		c.fadeIn = fadeIn
 	}
 }
 
@@ -655,6 +676,10 @@ func (c *Controller) opened(gen int, song string, tr Track, err error) {
 	}
 	quit := make(chan struct{})
 	c.trackQuit = quit
+	if f, ok := tr.(FadeInTrack); ok && c.fadeIn {
+		f.FadeIn()
+	}
+	c.fadeIn = false
 	if c.paused {
 		c.status = StatusPause
 	} else {
@@ -680,8 +705,10 @@ func (c *Controller) finished(gen int) {
 		c.stopList()
 		c.Resume(c.songPath, c.elapsed)
 	} else if err == nil && c.playing && c.Repeat && c.RepeatTrack {
+		c.fadeIn = true
 		c.open(c.songPath)
 	} else {
+		c.fadeIn = err == nil
 		c.advance()
 	}
 	c.changed()
@@ -705,6 +732,7 @@ func (c *Controller) stopSong() error {
 	c.gen++
 	c.opening = false
 	c.seekOnOpen = 0
+	c.fadeIn = false
 	var err error
 	if c.track == nil {
 		c.allowRepeat = true
@@ -732,6 +760,7 @@ func (c *Controller) stopSong() error {
 // stopList ends playing the playlist.
 func (c *Controller) stopList() {
 	c.playing = false
+	c.fadeIn = false
 	c.single = singleNone
 	c.allowRepeat = false
 	c.resetPlaylist(true)
