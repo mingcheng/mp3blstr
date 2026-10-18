@@ -3,7 +3,7 @@
 ## Build and verification
 
 - Use Go 1.27.2 (see [go.mod](go.mod) and [mise.toml](mise.toml)).
-- Run focused tests with `go test ./internal/<package>` during changes; run `make all` (vet, tests, build) before finishing. See [Makefile](Makefile) and [CI](.github/workflows/ci.yml) for the authoritative checks.
+- Run focused tests with `go test ./internal/<package>` during changes; run `make all` (vet, tests, build) before finishing. See [Makefile](Makefile) and [CI](.github/workflows/release.yml) for the authoritative checks.
 - Build with `make build` rather than a bare `go build`: the Makefile sets `CGO_ENABLED=0`, version/linker flags, and a purego compiler flag needed for FreeBSD/NetBSD. Use `make race` for race checks (it enables cgo), and `make cross` when changing platform-sensitive code.
 
 ## Ownership
