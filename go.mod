@@ -18,8 +18,8 @@ require (
 	github.com/spf13/pflag v1.0.10
 	go.yaml.in/yaml/v3 v3.0.5
 	golang.design/x/hotkey v0.6.4
-	golang.org/x/image v0.31.0
-	golang.org/x/text v0.31.0
+	golang.org/x/image v0.41.0
+	golang.org/x/text v0.37.0
 )
 
 require (
