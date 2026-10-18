@@ -806,8 +806,16 @@ func TestRemoveDuplicateFilesCommand(t *testing.T) {
 	a.AddFiles([]string{"/music/b.mp3", "/music/a.mp3", "/music/b.mp3"})
 	a.MainView().Set(3, a.MainLen())
 	press(a, 'D')
-	if group.Len() != 2 || a.Root.Len() != 2 || a.Root.Item(1).Path != "/music/b.mp3" {
+	// AddFiles stores absolute paths, which gain a drive letter on Windows.
+	wantB, err := filepath.Abs("/music/b.mp3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if group.Len() != 2 || a.Root.Len() != 2 {
 		t.Fatalf("duplicates not removed across groups: group=%d root=%d", group.Len(), a.Root.Len())
+	}
+	if got := a.Root.Item(1).Path; got != wantB {
+		t.Fatalf("root song path = %q, want %q", got, wantB)
 	}
 	if a.MainView().Cursor >= a.MainLen() || a.Msg.Text != "Removed 2 duplicate files" {
 		t.Fatalf("cursor=%d message=%q", a.MainView().Cursor, a.Msg.Text)
