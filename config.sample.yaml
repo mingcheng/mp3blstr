@@ -13,6 +13,7 @@ ui:
   #                          # entries without icons keep a blank icon slot
   #                          # also styles checkboxes, mixer and paging arrows
   #                          # false restores original [F 1] shortcut labels
+  #                          # and stops the playing song's name scrolling
   # mouse: true
   #                          # includes hover pointers in supported terminals;
   #                          # disabled inside tmux/screen
@@ -23,7 +24,8 @@ ui:
   # display_mode: filename   # playlist: path, filename or id3 (toggle: f)
   # wrap_around: true        # moving past the end of a list wraps around
   # scroll_playing: true     # scroll the name of the playing song
-  #                          # (toggle: F); [ID3] labels stay in place,
+  #                          # (toggle: F); only with nerd_font: true,
+  #                          # [ID3] labels stay in place,
   #                          # pausing stops the scrolling
   # follow_playing: true     # move the playlist selection bar to the
   #                          # playing song (toggle: L): on previous/next,

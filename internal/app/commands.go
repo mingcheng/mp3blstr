@@ -101,7 +101,11 @@ func (a *App) Exec(cmd keys.Command) {
 	case keys.CmdToggleScroll:
 		a.Opts.ScrollPlaying = !a.Opts.ScrollPlaying
 		a.marquee = 0
-		a.SetMessage("Scrolling of the playing song " + enabledText(a.Opts.ScrollPlaying))
+		msg := "Scrolling of the playing song " + enabledText(a.Opts.ScrollPlaying)
+		if a.Opts.ScrollPlaying && !a.Opts.NerdFont {
+			msg += " (needs Nerd Font icons)"
+		}
+		a.SetMessage(msg)
 	case keys.CmdToggleFollow:
 		a.Opts.FollowPlaying = !a.Opts.FollowPlaying
 		if a.Opts.FollowPlaying {
@@ -115,6 +119,7 @@ func (a *App) Exec(cmd keys.Command) {
 		a.SetMessage("Theme: " + a.Opts.Theme)
 	case keys.CmdToggleNerdFont:
 		a.Opts.NerdFont = !a.Opts.NerdFont
+		a.marquee = 0 // the playing song's name scrolls with Nerd Font only
 		a.SetMessage("Nerd Font icons " + enabledText(a.Opts.NerdFont))
 	case keys.CmdDel:
 		a.deleteItem()

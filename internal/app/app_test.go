@@ -220,6 +220,7 @@ func TestScrollPlayingName(t *testing.T) {
 	writeID3(t, second, "Other", "Song")
 	a.AddFiles([]string{first, second})
 	a.groupView(a.Root).display = playlist.DisplayID3
+	a.Opts.NerdFont = true
 	a.Player = playback.New(a.Root, okBackend{}, a.view.Post, (*listener)(a))
 
 	settle := func() {
@@ -301,6 +302,20 @@ func TestScrollPlayingName(t *testing.T) {
 	press(a, 'F')
 	if r := a.MainRow(1); !a.Opts.ScrollPlaying || !r.Marquee || r.Scroll != 0 {
 		t.Fatalf("F should enable scrolling from the start: %+v", r)
+	}
+
+	// Without Nerd Font icons the name never scrolls.
+	tick(3)
+	press(a, 'I')
+	if r := a.MainRow(1); a.Opts.NerdFont || !a.Opts.ScrollPlaying || r.Marquee || r.Text != "[ID3] Other - Song" {
+		t.Fatalf("Nerd Font off: %+v", r)
+	}
+	if a.Tick(); a.marquee != 0 || a.TickInterval() != time.Second {
+		t.Fatalf("Nerd Font off: steps %d, tick interval %v", a.marquee, a.TickInterval())
+	}
+	press(a, 'I')
+	if r := a.MainRow(1); !r.Marquee || r.Scroll != 0 || a.TickInterval() != marqueeInterval {
+		t.Fatalf("Nerd Font on again: %+v", r)
 	}
 }
 
@@ -1159,6 +1174,9 @@ func TestToggleMessages(t *testing.T) {
 		{keys.CmdToggleNerdFont, "Nerd Font icons disabled"},
 		{keys.CmdToggleFadeOut, "Fade in/out enabled"},
 		{keys.CmdToggleFadeOut, "Fade in/out disabled"},
+		{keys.CmdToggleScroll, "Scrolling of the playing song disabled"},
+		{keys.CmdToggleScroll, "Scrolling of the playing song enabled (needs Nerd Font icons)"},
+		{keys.CmdToggleNerdFont, "Nerd Font icons enabled"},
 		{keys.CmdToggleScroll, "Scrolling of the playing song disabled"},
 		{keys.CmdToggleScroll, "Scrolling of the playing song enabled"},
 	} {

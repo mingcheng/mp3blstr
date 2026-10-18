@@ -444,10 +444,15 @@ const mpegFrameDuration = 26 * time.Millisecond
 // song's name.
 const marqueeInterval = 300 * time.Millisecond
 
+// scrollPlaying reports whether the name of the playing song scrolls
+// (ui.scroll_playing). Without Nerd Font icons it never does: plain
+// terminals redraw the line every step, which some consoles handle badly.
+func (a *App) scrollPlaying() bool { return a.Opts.ScrollPlaying && a.Opts.NerdFont }
+
 // marqueeRunning reports whether the name of the playing song scrolls: the
 // option is on, the playlist is shown and a song plays (pausing stops it).
 func (a *App) marqueeRunning() bool {
-	return a.Opts.ScrollPlaying && a.Mode == keys.ModeNormal && a.Player.HasSong() && !a.Player.Paused()
+	return a.scrollPlaying() && a.Mode == keys.ModeNormal && a.Player.HasSong() && !a.Player.Paused()
 }
 
 // TickInterval is zero when no animation is needed. --runframes controls
@@ -572,7 +577,7 @@ func (a *App) playlistRow(i int) Row {
 	r.Right = a.songDetail(it.Path, display)
 	if p, _, ok := a.Player.SongInfo(); ok && a.Player.HasSong() && p == it.Path {
 		r.Playing = true
-		if a.Opts.ScrollPlaying {
+		if a.scrollPlaying() {
 			r.Marquee, r.Scroll = true, a.marquee
 			if rest, ok := strings.CutPrefix(r.Text, media.ID3Prefix); ok {
 				r.Prefix, r.Text = media.ID3Prefix, rest

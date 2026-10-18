@@ -122,8 +122,9 @@ func writeID3(t *testing.T, path, artist, title string) {
 	}
 }
 
-// playID3 plays an ID3 tagged song shown with its ID3 name and returns the
-// app and a function drawing the playlist row of the song.
+// playID3 plays an ID3 tagged song shown with its ID3 name, with Nerd Font
+// icons (the name scrolls only with them), and returns the app and a
+// function drawing the playlist row of the song without its icon.
 func playID3(t *testing.T, artist, title string) (*app.App, func() string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "song.mp3")
@@ -132,6 +133,7 @@ func playID3(t *testing.T, artist, title string) (*app.App, func() string) {
 	a := newRenderApp(t, idleBackend{}, view)
 	a.AddFiles([]string{path})
 	a.Exec(keys.CmdToggleDisplay) // file names -> ID3 names
+	a.Opts.NerdFont = true
 	a.Player.Play()
 	deadline := time.Now().Add(5 * time.Second)
 	for !a.Player.HasSong() {
@@ -141,7 +143,13 @@ func playID3(t *testing.T, artist, title string) (*app.App, func() string) {
 		view.run()
 		time.Sleep(time.Millisecond)
 	}
-	return a, func() string { return draw(t, a, 80, 24, listview.Width{})[11] }
+	return a, func() string {
+		line := []rune(draw(t, a, 80, 24, listview.Width{})[11])
+		if a.Opts.NerdFont {
+			line = append(line[:1], line[3:]...) // the playing icon takes two cells
+		}
+		return string(line)
+	}
 }
 
 // The name of the playing song scrolls while the [ID3] label stays put,
@@ -178,8 +186,39 @@ func TestShortPlayingNameScrolls(t *testing.T) {
 		a.Tick()
 	}
 	got := []rune(row())
-	// "│[ID3] " takes cells 0..6; the name scrolls in cells 7..66.
-	if name := string(got[7:67]); !strings.HasPrefix(name, "ist - Song   ") || !strings.HasSuffix(name, "   Art") {
+	// "│[ID3] " takes cells 0..6 (after the icon); the name scrolls up to the
+	// border of the list.
+	if name := string(got[7:65]); !strings.HasPrefix(name, "ist - Song   ") || !strings.HasSuffix(name, "   Art") {
 		t.Fatalf("the name must leave on the left and re-enter on the right: %q", string(got))
+	}
+}
+
+// Without Nerd Font icons the name never scrolls, for consoles that redraw
+// poorly; turning the icons back on restarts it from the beginning.
+func TestNoScrollingWithoutNerdFont(t *testing.T) {
+	a, row := playID3(t, "Artist", strings.Repeat("0123456789", 8))
+	a.Exec(keys.CmdToggleNerdFont)
+	if a.Opts.NerdFont || !a.Opts.ScrollPlaying {
+		t.Fatal("turning Nerd Font off keeps the scroll_playing setting")
+	}
+	start := row()
+	if !strings.HasPrefix(start, "│[ID3] Artist - 0123") {
+		t.Fatalf("start: %q", start)
+	}
+	for range marqueeHold + 5 {
+		a.Tick()
+	}
+	if got := row(); got != start {
+		t.Fatalf("the name must not scroll without Nerd Font:\n got %q\nwant %q", got, start)
+	}
+	a.Exec(keys.CmdToggleNerdFont)
+	if got := row(); !strings.HasPrefix(got, "│[ID3] Artist - 0123") {
+		t.Fatalf("scrolling restarts from the beginning: %q", got)
+	}
+	for range marqueeHold + 2 {
+		a.Tick()
+	}
+	if got := row(); !strings.HasPrefix(got, "│[ID3] tist - 0123") {
+		t.Fatalf("with Nerd Font the name scrolls again: %q", got)
 	}
 }
