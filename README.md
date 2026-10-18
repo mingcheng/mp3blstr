@@ -12,8 +12,7 @@ left, a row of CD-player buttons on the right, and the keys `1` to `6` for rewin
 previous, play and next, without your hands ever leaving the keyboard. mp3blaster has not been
 maintained since 2017, and its aging audio interfaces no longer build on modern systems.
 
-mp3blstr has a simple goal: **make that muscle memory useful again, make those old playlists play
-again, and keep it running for the next twenty years.**
+mp3blstr has a simple goal: make that muscle memory useful again, and keep it running for the next twenty years.
 
 ## Product highlights
 
