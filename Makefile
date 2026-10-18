@@ -1,6 +1,6 @@
 BINARY  := mp3blstr
 VERSION ?= $(shell git describe --tags --exact-match --match 'v*' 2>/dev/null || echo dev)
-BUILD_DATE ?= $(shell date -u +%Y%m%d)
+BUILD_DATE ?= $(shell TZ=UTC git log -1 --format=%cd --date=format-local:%Y%m%d 2>/dev/null || date -u +%Y%m%d)
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.buildDate=$(BUILD_DATE)
 # purego (used by oto) needs this flag to build without cgo on FreeBSD/NetBSD;
 # it is harmless on the other platforms.

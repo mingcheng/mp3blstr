@@ -22,8 +22,11 @@ builds:
       - -trimpath
     gcflags:
       - github.com/ebitengine/purego/internal/fakecgo=-std
+    # Derive the build date and file times from the commit so release builds
+    # are reproducible.
+    mod_timestamp: "{{ .CommitTimestamp }}"
     ldflags:
-      - '-s -w -X main.version={{ if .IsSnapshot }}dev{{ else }}{{ .Version }}{{ end }} -X main.buildDate={{ time "20060102" }}'
+      - '-s -w -X main.version={{ if .IsSnapshot }}dev{{ else }}{{ .Version }}{{ end }} -X main.buildDate={{ replace (slice .CommitDate 0 10) "-" "" }}'
 
 archives:
   - formats: [tar.gz]
@@ -39,6 +42,23 @@ archives:
 
 checksum:
   name_template: checksums.txt
+
+changelog:
+  abbrev: 7
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\(.+\))??!?:.+$'
+      order: 0
+    - title: Bug fixes
+      regexp: '^.*?fix(\(.+\))??!?:.+$'
+      order: 1
+    - title: Others
+      order: 999
+  filters:
+    exclude:
+      - '^(chore|style|test|docs|ci|build)(\(.+\))?!?:'
+      - '(?i)^merge (pull request|branch)'
+      - '(?i)^agent host session'
 
 release:
   prerelease: auto

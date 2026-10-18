@@ -15,6 +15,8 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
+	"runtime/debug"
 	"strings"
 	"syscall"
 
@@ -32,6 +34,32 @@ import (
 // version and buildDate are set at build time with -ldflags -X.
 var version = "dev"
 var buildDate string
+
+// pseudoVersion matches the timestamp-revision suffix of Go pseudo-versions,
+// e.g. v0.0.0-20261018020042-e38be1c53ab5.
+var pseudoVersion = regexp.MustCompile(`\d{14}-[0-9a-f]{12}`)
+
+// resolveVersion returns the version stamped with -ldflags, falling back to
+// the module version recorded by `go install module@vX.Y.Z`. Development
+// builds (pseudo-versions, dirty trees) keep reporting "dev".
+func resolveVersion(stamped string, info *debug.BuildInfo) string {
+	if stamped != "" && stamped != "dev" {
+		return stamped
+	}
+	if info != nil {
+		v := info.Main.Version
+		if strings.HasPrefix(v, "v") && !strings.Contains(v, "+") && !pseudoVersion.MatchString(v) {
+			return v
+		}
+	}
+	return "dev"
+}
+
+// currentVersion returns the version of the running binary.
+func currentVersion() string {
+	info, _ := debug.ReadBuildInfo()
+	return resolveVersion(version, info)
+}
 
 // formatVersion returns a human-readable version string based on the
 // provided version and build date.
@@ -133,7 +161,7 @@ func run(args []string) int {
 	u := ui.New(ui.Options{Theme: th, NerdFont: opts.NerdFont, Mouse: opts.Mouse, ListWidth: opts.ListWidth})
 
 	a := app.New(app.Deps{
-		Version:    formatVersion(version, buildDate),
+		Version:    formatVersion(currentVersion(), buildDate),
 		Options:    opts,
 		Keys:       km,
 		Matcher:    matcher,
@@ -361,7 +389,7 @@ func usage(err error) int {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 	}
-	config.Usage(os.Stderr, formatVersion(version, buildDate))
+	config.Usage(os.Stderr, formatVersion(currentVersion(), buildDate))
 	return exitFailure
 }
 
@@ -373,7 +401,7 @@ func fail(err error) int {
 
 // printVersion prints the version and build features (--version).
 func printVersion() {
-	fmt.Printf("%s version %s - https://github.com/mingcheng/mp3blstr\n", filepath.Base(os.Args[0]), formatVersion(version, buildDate))
+	fmt.Printf("%s version %s - https://github.com/mingcheng/mp3blstr\n", filepath.Base(os.Args[0]), formatVersion(currentVersion(), buildDate))
 	fmt.Println("Supported audio formats: MP3 WAV OGG/Vorbis FLAC HTTP-streams")
 	fmt.Println("Supported audio output drivers: native (CoreAudio/WASAPI/PulseAudio/ALSA via oto, no cgo)")
 	fmt.Println("Build features: mouse, themes, nerd-font, read-ahead buffering")
