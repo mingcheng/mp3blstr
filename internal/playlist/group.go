@@ -341,7 +341,8 @@ func (g *Group) UnplayedGroups(recursive bool) int {
 }
 
 // UnplayedGroup returns the idx-th unplayed group (depth first, sub groups
-// before g itself) and optionally marks it played.
+// before g itself), counting the groups the way UnplayedGroups does, and
+// optionally marks it played. It returns nil when idx is out of range.
 func (g *Group) UnplayedGroup(idx int, setPlayed, recursive bool) *Group {
 	count := 0
 	if recursive {
@@ -353,7 +354,7 @@ func (g *Group) UnplayedGroup(idx int, setPlayed, recursive bool) *Group {
 			count += n
 		}
 	}
-	if count == idx && !g.played && g.UnplayedSongs(true) > 0 {
+	if count == idx && !g.played && g.UnplayedSongs(false) > 0 {
 		if setPlayed {
 			g.played = true
 		}
@@ -489,6 +490,7 @@ const (
 // Next returns the following display mode (wrapping around).
 func (m DisplayMode) Next() DisplayMode { return (m + 1) % numDisplayModes }
 
+// String returns the configuration name of the display mode.
 func (m DisplayMode) String() string {
 	switch m {
 	case DisplayPath:
@@ -500,6 +502,7 @@ func (m DisplayMode) String() string {
 	}
 }
 
+// ParseDisplayMode parses a configuration name: path, filename or id3.
 func ParseDisplayMode(s string) (DisplayMode, error) {
 	switch s {
 	case "path":

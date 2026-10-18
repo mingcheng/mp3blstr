@@ -19,6 +19,7 @@ type fakeTrack struct {
 	err        error
 	starts     int
 	seekErr    error
+	endErr     error // returned by SeekFromEnd
 	unseekable bool
 	fadedIn    bool
 }
@@ -43,9 +44,15 @@ func (t *fakeTrack) Seek(d int) error {
 	t.pos += d
 	return nil
 }
-func (t *fakeTrack) SeekFromEnd(int) error { return nil }
-func (t *fakeTrack) Seekable() bool        { return !t.unseekable }
-func (t *fakeTrack) Err() error            { return t.err }
+func (t *fakeTrack) SeekFromEnd(secs int) error {
+	if t.endErr != nil {
+		return t.endErr
+	}
+	t.pos = t.Info().TotalSeconds - secs
+	return nil
+}
+func (t *fakeTrack) Seekable() bool { return !t.unseekable }
+func (t *fakeTrack) Err() error     { return t.err }
 
 type fakeBackend struct {
 	opened []string
@@ -589,5 +596,77 @@ func TestResumeCancelledByStopAndPlayOne(t *testing.T) {
 	}
 	if p, _ := h.c.ResumePoint(); p != "x" {
 		t.Fatalf("resume point %q", p)
+	}
+}
+
+// Play toggles between pause and play once a song is loaded.
+func TestPlayTogglesPause(t *testing.T) {
+	root := playlist.NewGroup("[Default]")
+	root.AddSong("a")
+	h := newHarness(root)
+	defer h.c.Shutdown()
+	h.c.Play()
+	h.settle(t)
+	tr := h.c.track.(*fakeTrack)
+	if h.c.Status() != StatusPlay || tr.paused || tr.starts != 1 {
+		t.Fatalf("not playing: status %d paused %v starts %d", h.c.Status(), tr.paused, tr.starts)
+	}
+	h.c.Play()
+	if h.c.Status() != StatusPause || !h.c.Paused() || !tr.paused || !h.c.ShowPlaySymbol() {
+		t.Fatal("second Play must pause")
+	}
+	h.c.Play()
+	if h.c.Status() != StatusPlay || h.c.Paused() || tr.paused || tr.starts != 2 {
+		t.Fatal("third Play must resume")
+	}
+}
+
+// Every seek attempt publishes a new revision, so system media controls
+// resync even after the decoder rejected it; a failed skip to the end
+// leaves the position alone.
+func TestSeekRevisionsAndWarnings(t *testing.T) {
+	root := playlist.NewGroup("[Default]")
+	root.AddSong("a")
+	h := newHarness(root)
+	defer h.c.Shutdown()
+	h.c.Play()
+	h.settle(t)
+	tr := h.c.track.(*fakeTrack)
+
+	rev := h.c.Revision()
+	h.c.SeekTo(30)
+	if h.c.Elapsed() != 30 || h.c.Revision() != rev+1 {
+		t.Fatalf("SeekTo: elapsed %d revision %d", h.c.Elapsed(), h.c.Revision())
+	}
+	h.c.Rewind()
+	h.c.Rewind()
+	h.c.Rewind()
+	h.c.Rewind() // clamped at the start
+	if h.c.Elapsed() != 0 {
+		t.Fatalf("rewind below 0: elapsed %d", h.c.Elapsed())
+	}
+	h.c.Forward()
+	if h.c.Elapsed() != h.c.SkipSeconds {
+		t.Fatalf("forward: elapsed %d", h.c.Elapsed())
+	}
+
+	tr.seekErr = errors.New("boom")
+	rev = h.c.Revision()
+	h.c.SeekTo(50)
+	if !strings.Contains(h.l.warning, "boom") || h.c.Revision() != rev+1 {
+		t.Fatalf("failed seek: warning %q revision %d", h.l.warning, h.c.Revision())
+	}
+
+	h.l.warning = ""
+	rev = h.c.Revision()
+	h.c.SkipToEnd()
+	if h.c.Elapsed() != 60-skipToEndSeconds || h.c.Revision() != rev+1 || h.l.warning != "" {
+		t.Fatalf("skip to end: elapsed %d revision %d", h.c.Elapsed(), h.c.Revision())
+	}
+	tr.endErr = errors.New("unseekable")
+	rev = h.c.Revision()
+	h.c.SkipToEnd()
+	if h.c.Revision() != rev || !strings.Contains(h.l.warning, "unseekable") {
+		t.Fatal("failed skip to end must warn without a new revision")
 	}
 }

@@ -14,8 +14,10 @@ import (
 
 const SupportsInterruptions = true
 
+// propertyAddress mirrors CoreAudio's AudioObjectPropertyAddress. The
+// unnamed last field is mElement, always kAudioObjectPropertyElementMain (0).
 type propertyAddress struct {
-	selector, scope, element uint32
+	selector, scope, _ uint32
 }
 
 var defaultOutputAddress = propertyAddress{selector: 0x644f7574, scope: 0x676c6f62} // dOut, glob

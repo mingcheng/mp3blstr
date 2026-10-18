@@ -11,6 +11,9 @@ import (
 	"github.com/mingcheng/mp3blstr/internal/atomicfile"
 )
 
+// metadataEntry is what is known about a local file. It is valid while the
+// file's size and modification time are unchanged; Tags and Name are only
+// valid for the tag decoding Profile they were read with.
 type metadataEntry struct {
 	Size     int64   `json:"size"`
 	Modified int64   `json:"modified"`
@@ -20,6 +23,8 @@ type metadataEntry struct {
 	Duration *int    `json:"duration,omitempty"`
 }
 
+// metadata is the in-memory cache, backed by one JSON file per song in dir
+// when the disk cache is enabled.
 var metadata = struct {
 	sync.Mutex
 	dir     string
@@ -37,11 +42,29 @@ func ConfigureMetadataCache(dir, profile string) {
 	metadata.entries = map[string]metadataEntry{}
 }
 
+// metadataProfile returns the active tag decoding profile.
+func metadataProfile() string {
+	metadata.Lock()
+	defer metadata.Unlock()
+	return metadata.profile
+}
+
+// clearMetadataMemory drops the in-memory entries, e.g. after the tag
+// decoding changed. Disk entries are checked against the profile instead.
+func clearMetadataMemory() {
+	metadata.Lock()
+	metadata.entries = map[string]metadataEntry{}
+	metadata.Unlock()
+}
+
+// cachePath returns the disk cache file of path. The caller holds the lock.
 func cachePath(path string) string {
 	key := sha256.Sum256([]byte(path))
 	return filepath.Join(metadata.dir, hex.EncodeToString(key[:])+".json")
 }
 
+// cachedEntry returns the entry of path from memory or disk, provided the
+// file has not changed since it was stored.
 func cachedEntry(path string) (metadataEntry, bool) {
 	stat, err := os.Stat(path)
 	if err != nil {
@@ -63,6 +86,8 @@ func cachedEntry(path string) (metadataEntry, bool) {
 	return entry, true
 }
 
+// storeEntry applies update to the entry of path (a fresh one when the file
+// changed) and stores it. update runs with the cache locked.
 func storeEntry(path string, update func(*metadataEntry)) {
 	stat, err := os.Stat(path)
 	if err != nil {
@@ -97,6 +122,7 @@ func CachedDuration(path string, read func(string) (int, error)) (int, error) {
 	return seconds, err
 }
 
+// forgetMetadata drops the entry of path from memory and disk.
 func forgetMetadata(path string) {
 	metadata.Lock()
 	defer metadata.Unlock()

@@ -46,9 +46,7 @@ func SetGuessLegacyTags(enabled bool) {
 	recodeMu.Lock()
 	guessLegacyTags = enabled
 	recodeMu.Unlock()
-	metadata.Lock()
-	metadata.entries = map[string]metadataEntry{}
-	metadata.Unlock()
+	clearMetadataMemory()
 }
 
 // SetRecoder installs a global tag text recoder.
@@ -56,11 +54,11 @@ func SetRecoder(r Recoder) {
 	recodeMu.Lock()
 	recoder = r
 	recodeMu.Unlock()
-	metadata.Lock()
-	metadata.entries = map[string]metadataEntry{}
-	metadata.Unlock()
+	clearMetadataMemory()
 }
 
+// recode applies the legacy tag guessing and the configured recoder to
+// tag text.
 func recode(s string) string {
 	recodeMu.RLock()
 	r := recoder
@@ -75,6 +73,10 @@ func recode(s string) string {
 	return r(s)
 }
 
+// guessTagText recovers tag text that a tag library decoded as Latin-1
+// although it holds UTF-8 or a legacy encoding (mostly GB18030): when every
+// rune fits in a byte, the bytes are re-decoded as UTF-8 or as the charset
+// chardet detects. s is returned unchanged when that fails.
 func guessTagText(s string) string {
 	if strings.IndexFunc(s, func(r rune) bool { return r > 127 }) < 0 {
 		return s
@@ -177,13 +179,8 @@ func LoadRecodeTable(file string) (Recoder, error) {
 
 // ReadTags reads ID3v1/ID3v2/Vorbis/FLAC/MP4 tags from a local file.
 func ReadTags(path string) (Tags, error) {
-	if entry, ok := cachedEntry(path); ok {
-		metadata.Lock()
-		profile := metadata.profile
-		metadata.Unlock()
-		if entry.Profile == profile && entry.Tags != nil {
-			return *entry.Tags, nil
-		}
+	if entry, ok := cachedEntry(path); ok && entry.Profile == metadataProfile() && entry.Tags != nil {
+		return *entry.Tags, nil
 	}
 	tags, err := readTags(path)
 	if err == nil {
@@ -198,6 +195,7 @@ func ReadTags(path string) (Tags, error) {
 	return tags, err
 }
 
+// readTags reads the tags of path without the cache.
 func readTags(path string) (Tags, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -220,6 +218,7 @@ func readTags(path string) (Tags, error) {
 	return t, nil
 }
 
+// clean trims padding from tag text and recodes it.
 func clean(s string) string {
 	return recode(strings.TrimSpace(strings.Trim(s, "\x00")))
 }
@@ -233,16 +232,11 @@ func ID3Name(path, fallback string) string {
 	if IsHTTPStream(path) {
 		return fallback
 	}
-	if entry, ok := cachedEntry(path); ok {
-		metadata.Lock()
-		profile := metadata.profile
-		metadata.Unlock()
-		if entry.Name != nil && entry.Profile == profile {
-			if *entry.Name != "" {
-				return *entry.Name
-			}
-			return fallback
+	if entry, ok := cachedEntry(path); ok && entry.Name != nil && entry.Profile == metadataProfile() {
+		if *entry.Name != "" {
+			return *entry.Name
 		}
+		return fallback
 	}
 	name := ""
 	if t, err := ReadTags(path); err == nil && (t.Artist != "" || t.Title != "") {

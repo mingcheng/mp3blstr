@@ -6,6 +6,7 @@ package ui
 import (
 	"errors"
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -35,6 +36,8 @@ type UI struct {
 	tickWake     chan struct{}
 	tickInterval atomic.Int64
 	pointer      pointerProtocol
+	stopped      chan struct{} // closed when Run returns
+	stopOnce     sync.Once
 }
 
 // New creates the interface. Call Attach before Run.
@@ -43,6 +46,7 @@ func New(opts Options) *UI {
 		tapp:     tview.NewApplication(),
 		screen:   newScreen(opts.Theme, theme.For(opts.Theme, opts.NerdFont), opts.NerdFont, opts.ListWidth),
 		tickWake: make(chan struct{}, 1),
+		stopped:  make(chan struct{}),
 	}
 	u.tapp.EnableMouse(opts.Mouse)
 	if opts.Mouse {
@@ -61,8 +65,39 @@ func (u *UI) Attach(a *app.App) {
 }
 
 // Post runs f on the UI goroutine and redraws the screen. It blocks until
-// f has run, so it must not be called on the UI goroutine itself.
-func (u *UI) Post(f func()) { u.tapp.QueueUpdateDraw(f) }
+// f has run, so it must not be called on the UI goroutine itself. Once the
+// event loop has ended, f is dropped and Post returns immediately.
+func (u *UI) Post(f func()) {
+	u.queue(func() {
+		f()
+		u.tapp.ForceDraw() // safe within a queued update
+	})
+}
+
+// queue runs f on the event loop and waits until it has run. It reports
+// false, without running f, when the event loop ends first: tview's
+// QueueUpdate would block forever then, and background goroutines (media
+// keys, song loading, timers) must not hang the shutdown.
+func (u *UI) queue(f func()) bool {
+	select {
+	case <-u.stopped:
+		return false
+	default:
+	}
+	ran := make(chan struct{})
+	// This goroutine stays blocked in QueueUpdate if the loop ends before
+	// it takes f; that only happens once, while the program exits.
+	go u.tapp.QueueUpdate(func() {
+		f()
+		close(ran)
+	})
+	select {
+	case <-ran:
+		return true
+	case <-u.stopped:
+		return false
+	}
+}
 
 // Beep rings the terminal bell.
 func (u *UI) Beep() {
@@ -79,6 +114,7 @@ func (u *UI) Quit() { u.tapp.Stop() }
 
 // Run starts the event loop; it returns when the program quits.
 func (u *UI) Run() error {
+	defer u.stopOnce.Do(func() { close(u.stopped) })
 	var pointer *pointerScreen
 	if u.pointer != pointerUnsupported {
 		scr, err := tcell.NewScreen()
@@ -94,10 +130,8 @@ func (u *UI) Run() error {
 		pointer.EnableMouse()
 		pointer.EnablePaste()
 	}
-	done := make(chan struct{})
-	defer close(done)
 	u.scheduleTick()
-	go u.tick(done)
+	go u.tick()
 	err := u.tapp.Run()
 	if pointer != nil {
 		err = errors.Join(err, pointer.pointerError())
@@ -105,8 +139,9 @@ func (u *UI) Run() error {
 	return err
 }
 
-// tick disables its timer while idle and redraws only when something changed.
-func (u *UI) tick(done <-chan struct{}) {
+// tick disables its timer while idle and redraws only when something
+// changed. It ends with the event loop.
+func (u *UI) tick() {
 	t := time.NewTimer(time.Hour)
 	t.Stop()
 	defer t.Stop()
@@ -117,12 +152,12 @@ func (u *UI) tick(done <-chan struct{}) {
 			ticks = t.C
 		}
 		select {
-		case <-done:
+		case <-u.stopped:
 			return
 		case <-u.tickWake:
 			t.Stop()
 		case <-ticks:
-			u.tapp.QueueUpdate(func() {
+			u.queue(func() {
 				if u.app.Tick() {
 					u.tapp.ForceDraw() // safe within a queued update
 				}
@@ -131,6 +166,8 @@ func (u *UI) tick(done <-chan struct{}) {
 	}
 }
 
+// scheduleTick adapts the tick timer to the interval the application
+// currently needs (see app.App.TickInterval); it runs after every draw.
 func (u *UI) scheduleTick() {
 	if u.app == nil {
 		return

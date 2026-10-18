@@ -123,6 +123,9 @@ func TestParseConfigErrors(t *testing.T) {
 		"files: {audio_patterns: {a: b}}",
 		"ui: {colors: {default: {fg: purple}}}",
 		"ui:\n  colors:\n    default:\n      fg: #ff0000\n",
+		"ui: {colors: {default: {fg: \"#zzzzzz\"}}}",
+		"ui: {colors: {default: {fg: \"#12345\"}}}",
+		"ui: {colors: {default: {fg: \"#1234567\"}}}",
 		"ui: dark",
 		"keys: {play: {bogus: x}}",
 		"keys: {play: {next: [n, m]}}",
@@ -188,5 +191,16 @@ func TestThemes(t *testing.T) {
 	}
 	if NextTheme("classic") != "modern" || NextTheme("MODERN") != "classic" || NextTheme("bogus") != "classic" {
 		t.Fatal("NextTheme should cycle through Themes")
+	}
+}
+
+func TestIsHexColour(t *testing.T) {
+	for in, want := range map[string]bool{
+		"#000000": true, "#FFaa09": true,
+		"#zzzzzz": false, "#12345": false, "#1234567": false, "123456": false, "": false,
+	} {
+		if got := isHexColour(in); got != want {
+			t.Errorf("isHexColour(%q) = %v, want %v", in, got, want)
+		}
 	}
 }

@@ -130,6 +130,55 @@ func TestUnplayedAccounting(t *testing.T) {
 	}
 }
 
+// UnplayedGroup must agree with UnplayedGroups: a group whose own songs
+// are all played (or that has none) is not a group left to play, even when
+// its sub groups still have songs.
+func TestUnplayedGroupMatchesCount(t *testing.T) {
+	root := NewGroup("[r]")
+	sub := NewGroup("[s]")
+	root.AddGroup(sub)
+	sub.AddSong("s1")
+	if n := root.UnplayedGroups(true); n != 1 {
+		t.Fatalf("groups=%d, want 1 (root has no songs of its own)", n)
+	}
+	if g := root.UnplayedGroup(0, false, true); g != sub {
+		t.Fatalf("group 0 = %v, want the sub group", g)
+	}
+	if g := root.UnplayedGroup(1, false, true); g != nil {
+		t.Fatalf("group 1 = %q, want nil", g.Title)
+	}
+
+	root.AddSong("r1")
+	if n := root.UnplayedGroups(true); n != 2 {
+		t.Fatalf("groups=%d, want 2", n)
+	}
+	if g := root.UnplayedGroup(1, true, true); g != root {
+		t.Fatal("group 1 must be the root once it has songs")
+	}
+	if root.UnplayedGroups(true) != 1 || root.UnplayedGroup(1, false, true) != nil {
+		t.Fatal("a played group must not be returned again")
+	}
+}
+
+// GroupsBefore lists groups in play order (sub groups before their parent).
+func TestGroupsBefore(t *testing.T) {
+	root := NewGroup("[r]")
+	a, b, a1 := NewGroup("[a]"), NewGroup("[b]"), NewGroup("[a1]")
+	root.AddGroup(a)
+	root.AddGroup(b)
+	a.AddGroup(a1)
+	before, ok := root.GroupsBefore(b)
+	if !ok || len(before) != 2 || before[0] != a1 || before[1] != a {
+		t.Fatalf("before b: %v %v", before, ok)
+	}
+	if before, ok := root.GroupsBefore(root); !ok || len(before) != 3 {
+		t.Fatalf("before root: %d %v", len(before), ok)
+	}
+	if _, ok := a.GroupsBefore(b); ok {
+		t.Fatal("b is not below a")
+	}
+}
+
 func TestWriteParseRoundTrip(t *testing.T) {
 	root := NewGroup("[Default]")
 	root.Shuffle = true

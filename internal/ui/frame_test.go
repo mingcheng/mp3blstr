@@ -50,9 +50,8 @@ func helpBarScreen(t *testing.T, width int, name string, nerd bool) (*Screen, tc
 func cellText(sim tcell.Screen, x, y, width int) string {
 	var text strings.Builder
 	for col := 0; col < width; {
-		r, combining, _, w := sim.GetContent(x+col, y)
-		text.WriteRune(r)
-		text.WriteString(string(combining))
+		str, _, w := sim.Get(x+col, y)
+		text.WriteString(str)
 		col += max(1, w)
 	}
 	return text.String()
@@ -88,9 +87,9 @@ func TestHelpBarKeycaps(t *testing.T) {
 							t.Errorf("%s keycap = %q, want %q", tc.key.Name(), got, want)
 						}
 						l := newLayout(width, 24, listview.Width{})
-						_, _, playStyle, _ := sim.GetContent(l.cx()+4, l.buttonsTop())
+						_, playStyle, _ := sim.Get(l.cx()+4, l.buttonsTop())
 						for x := 1; x <= keyWidth; x++ {
-							_, _, style, _ := sim.GetContent(x, 1)
+							_, style, _ := sim.Get(x, 1)
 							wantStyle := s.th.Button
 							if x == 1 || x == keyWidth {
 								wantStyle = s.th.Default
@@ -102,7 +101,7 @@ func TestHelpBarKeycaps(t *testing.T) {
 								t.Errorf("cell %d has incorrect keycap style: %v", x, style)
 							}
 						}
-						_, _, gapStyle, _ := sim.GetContent(1+keyWidth, 1)
+						_, gapStyle, _ := sim.Get(1+keyWidth, 1)
 						if gapStyle != s.th.Default {
 							t.Error("keycap style leaked into the gap")
 						}
@@ -177,13 +176,13 @@ func TestHelpBarIconsAndLiveSwitch(t *testing.T) {
 	if s.th.Name != "modern" {
 		t.Fatal("live theme switch did not apply")
 	}
-	_, _, style, _ := sim.GetContent(1, 1)
+	_, style, _ := sim.Get(1, 1)
 	if style != s.th.Default {
 		t.Error("theme switch must preserve plain brackets without keycap background")
 	}
 	s.app.Exec(keys.CmdToggleNerdFont)
 	s.Draw(sim)
-	_, _, style, _ = sim.GetContent(1, 1)
+	_, style, _ = sim.Get(1, 1)
 	if style != s.th.Label.Bold(false) {
 		t.Error("live theme switch lost keycap style")
 	}
@@ -215,7 +214,7 @@ func TestHelpBarEmptyIconSlot(t *testing.T) {
 			t.Errorf("empty icon keycap = %q, want %q", got, want)
 		}
 		for col := x; col < x+keyWidth; col++ {
-			_, _, style, _ := sim.GetContent(col, 1)
+			_, style, _ := sim.Get(col, 1)
 			wantStyle := s.th.Button
 			if col == x || col == x+keyWidth-1 {
 				wantStyle = s.th.Default

@@ -982,7 +982,7 @@ func TestRepeatShuffleAndHelpBarCategories(t *testing.T) {
 
 	ref := strings.Join(a.help, "\n")
 	for _, want := range []string{"Key bindings", "  R     Toggle Repeat", "  F6    Toggle Repeat        (Normal Mode)",
-		"  spc   Select File          (Normal/File Mode)", "  dwn   Move Scrolbar Down"} {
+		"  spc   Select File          (Normal/File Mode)", "  dwn   Move Scrollbar Down"} {
 		if !strings.Contains(ref, want) {
 			t.Errorf("key reference lacks %q", want)
 		}
@@ -1119,5 +1119,52 @@ func TestDeleteMoveAndMouse(t *testing.T) {
 	a.Click(keys.CmdToggleRepeat)
 	if !a.Repeat() {
 		t.Fatal("click command")
+	}
+}
+
+// Entering a group keeps the display mode of the group shown before and
+// starts unpanned; "[..]" leads back to the parent.
+func TestEnterGroupKeepsDisplay(t *testing.T) {
+	a, _ := newTestApp(t)
+	sub := playlist.NewGroup("[Sub]")
+	sub.AddSong("/music/song.mp3")
+	a.Root.AddGroup(sub)
+	a.groupView(a.Root).display = playlist.DisplayPath
+	a.groupView(sub).state.Pan = 7
+
+	a.Exec(keys.CmdEnter)
+	if a.Cur != sub {
+		t.Fatal("enter must open the sub group")
+	}
+	if gv := a.groupView(sub); gv.display != playlist.DisplayPath || gv.state.Pan != 0 {
+		t.Fatalf("sub group view: display %v pan %d", gv.display, gv.state.Pan)
+	}
+	if got := a.MainRow(1).Text; got != "/music/song.mp3" {
+		t.Fatalf("song shown as %q", got)
+	}
+
+	a.Exec(keys.CmdEnter) // on "[..]"
+	if a.Cur != a.Root {
+		t.Fatal("[..] must lead back to the parent group")
+	}
+}
+
+func TestToggleMessages(t *testing.T) {
+	a, _ := newTestApp(t)
+	for _, tc := range []struct {
+		cmd  keys.Command
+		want string
+	}{
+		{keys.CmdToggleNerdFont, "Nerd Font icons enabled"},
+		{keys.CmdToggleNerdFont, "Nerd Font icons disabled"},
+		{keys.CmdToggleFadeOut, "Fade in/out enabled"},
+		{keys.CmdToggleFadeOut, "Fade in/out disabled"},
+		{keys.CmdToggleScroll, "Scrolling of the playing song disabled"},
+		{keys.CmdToggleScroll, "Scrolling of the playing song enabled"},
+	} {
+		a.Exec(tc.cmd)
+		if a.Msg.Text != tc.want {
+			t.Errorf("after command %d: message %q, want %q", tc.cmd, a.Msg.Text, tc.want)
+		}
 	}
 }

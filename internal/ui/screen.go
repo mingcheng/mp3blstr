@@ -49,6 +49,8 @@ func newScreen(th theme.Theme, gl theme.Glyphs, nerd bool, width listview.Width)
 	return &Screen{Box: tview.NewBox(), th: th, gl: gl, nerd: nerd, width: width}
 }
 
+// onMouse registers fn for mouse events inside r (ignored when r is empty).
+// Areas registered later lie on top of earlier ones.
 func (s *Screen) onMouse(r rect, fn mouseFunc, pointer pointerShape) {
 	if r.w > 0 && r.h > 0 {
 		s.hits = append(s.hits, hitArea{r: r, fn: fn, pointer: pointer})
@@ -60,6 +62,8 @@ func (s *Screen) onClick(r rect, fn func()) {
 	s.onClickShape(r, fn, pointerHand)
 }
 
+// onClickShape registers a left-click (or double click) action that shows
+// the given pointer shape while hovering.
 func (s *Screen) onClickShape(r rect, fn func(), pointer pointerShape) {
 	s.onMouse(r, func(action tview.MouseAction, _, _ int) bool {
 		if action == tview.MouseLeftClick || action == tview.MouseLeftDoubleClick {
@@ -70,6 +74,8 @@ func (s *Screen) onClickShape(r rect, fn func(), pointer pointerShape) {
 	}, pointer)
 }
 
+// clickAction registers a click that runs cmd unconditionally (buttons that
+// are always valid, such as the CD-player buttons).
 func (s *Screen) clickAction(r rect, cmd keys.Command) {
 	s.onClickShape(r, func() { s.app.Click(cmd) }, pointerCommand)
 }
@@ -78,18 +84,12 @@ func (s *Screen) clickAction(r rect, cmd keys.Command) {
 // current program mode.
 func (s *Screen) clickCommand(r rect, cmd keys.Command) {
 	pointer := pointerDefault
-	for _, b := range s.app.Keys.ForMode(s.app.Mode) {
-		if b.Cmd == cmd {
-			pointer = pointerCommand
-			break
-		}
+	if s.app.Keys.Bound(cmd, s.app.Mode) {
+		pointer = pointerCommand
 	}
 	s.onClickShape(r, func() {
-		for _, b := range s.app.Keys.ForMode(s.app.Mode) {
-			if b.Cmd == cmd {
-				s.app.Click(cmd)
-				return
-			}
+		if s.app.Keys.Bound(cmd, s.app.Mode) {
+			s.app.Click(cmd)
 		}
 	}, pointer)
 }
@@ -148,6 +148,9 @@ func (s *Screen) Draw(scr tcell.Screen) {
 	}
 }
 
+// terminalTitle returns the window title for the player state: the status
+// and, while a song is loaded, "artist - title" (or the file or stream
+// name), limited to 256 runes.
 func terminalTitle(status playback.Status, path string, info media.SongInfo) string {
 	state := ""
 	switch status {
@@ -185,6 +188,8 @@ func terminalTitle(status playback.Status, path string, info media.SongInfo) str
 	return title
 }
 
+// terminalText makes tag text safe for a terminal title: control and
+// format characters are dropped and runs of white space become one space.
 func terminalText(text string) string {
 	text = strings.Map(func(char rune) rune {
 		if unicode.IsSpace(char) {
@@ -205,6 +210,7 @@ func (s *Screen) InputHandler() func(event *tcell.EventKey, setFocus func(p tvie
 	})
 }
 
+// PasteHandler forwards bracketed paste text to the application.
 func (s *Screen) PasteHandler() func(string, func(tview.Primitive)) {
 	return s.WrapPasteHandler(func(text string, _ func(tview.Primitive)) {
 		s.app.HandlePaste(text)

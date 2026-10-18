@@ -119,7 +119,8 @@ SET GROUP TITLE
   asked to enter a name.
 
 LOAD/ADD PLAYLIST
-  Enter File Mode in the playlist directory (PlaylistDir).
+  Enter File Mode in the playlist directory
+  (files.playlist_dir).
   Press ENTER on a playlist (.lst or .m3u) to add its
   contents to the current group.
 
@@ -238,7 +239,8 @@ Commands available in all modes
 PLAY SONG          Start the playlist, or pause/resume.
 STOP SONG          Stop playing and reset the playlist.
 PREVIOUS/NEXT SONG  Go back in the play history / skip.
-REWIND/FORWARD      Skip SkipLength seconds (default 10).
+REWIND/FORWARD      Skip playback.skip_length seconds
+                   (default 10).
 SKIP TO END SONG    Jump to the last seconds of the song.
 PREVIOUS/NEXT GROUP
                    Skip the rest of the group being played.
@@ -257,7 +259,9 @@ TOGGLE FILE DISPLAY
                    (file manager).
 SELECT SOME ITEMS  Select entries matching a pattern
                    (shell wildcards or regular expressions
-                   with SelectItems.SearchRegex = yes).
+                   with selection.regex: true). The
+                   selection.* settings also control case
+                   and clearing the old selection first.
 UNSELECT ALL       Clear the selection.
 CHANGE #THREADS     Set the size of the read-ahead buffer for
                    the next song (0 disables it).

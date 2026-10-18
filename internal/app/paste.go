@@ -23,11 +23,7 @@ func (a *App) HandlePaste(text string) {
 	}
 	text = strings.NewReplacer("\r\n", " ", "\r", " ", "\n", " ", "\t", " ").Replace(text)
 	e := a.Popup.Editor
-	newLen := len(e.buf) + utf8.RuneCountInString(text)
-	if !e.insert {
-		newLen = max(len(e.buf), e.pos+utf8.RuneCountInString(text))
-	}
-	if e.maxLen > 0 && newLen > e.maxLen {
+	if !e.Fits(utf8.RuneCountInString(text)) {
 		a.Warning("Pasted text is too long for this dialog.")
 		return
 	}
@@ -36,6 +32,8 @@ func (a *App) HandlePaste(text string) {
 	}
 }
 
+// addPaths adds the shell-quoted paths typed into the Add Audio Paths
+// dialog to the current group without interrupting playback.
 func (a *App) addPaths(text string) {
 	paths, err := shellquote.Split(text)
 	if err != nil {

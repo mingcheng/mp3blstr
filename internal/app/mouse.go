@@ -107,24 +107,29 @@ func (a *App) MixerVolume(delta int) {
 	}
 }
 
-// Volume uses the output mixer even when its terminal controls are hidden.
-func (a *App) Volume() int {
+// outputMixer returns the mixer applied to the audio output: fadeMixer, or
+// Mixer for an App not built by New.
+func (a *App) outputMixer() *audio.Mixer {
 	if a.fadeMixer != nil {
-		return a.fadeMixer.Device(audio.DevVolume).Value
+		return a.fadeMixer
 	}
-	if a.Mixer != nil {
-		return a.Mixer.Device(audio.DevVolume).Value
+	return a.Mixer
+}
+
+// Volume returns the output volume (0..100). It uses the output mixer, so
+// it works even when the mixer controls are hidden (--no-mixer).
+func (a *App) Volume() int {
+	if m := a.outputMixer(); m != nil {
+		return m.Device(audio.DevVolume).Value
 	}
 	return 100
 }
 
+// SetVolume sets the output volume (0..100), e.g. from the desktop's media
+// controls.
 func (a *App) SetVolume(volume int) {
-	mixer := a.fadeMixer
-	if mixer == nil {
-		mixer = a.Mixer
-	}
-	if mixer != nil {
-		mixer.SetDevice(audio.DevVolume, volume)
+	if m := a.outputMixer(); m != nil {
+		m.SetDevice(audio.DevVolume, volume)
 		a.playerChanged()
 	}
 }

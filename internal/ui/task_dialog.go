@@ -7,6 +7,8 @@ import (
 
 	"github.com/rivo/tview"
 	"github.com/rivo/uniseg"
+
+	"github.com/mingcheng/mp3blstr/internal/media"
 )
 
 const cancelButton = "[ Cancel (Esc) ]"
@@ -42,12 +44,11 @@ func (s *Screen) drawTask(c canvas, l layout) {
 	c.put(x+1, row+2, strings.Repeat("█", filled), s.th.PopupInput, barW)
 	c.put(x+1+barW, row+2, pct, s.th.Popup, len(pct))
 
-	secs := int(elapsed.Seconds())
 	status := t.Status
 	if status != "" {
 		status += "  "
 	}
-	c.put(x+1, row+3, fmt.Sprintf("%s%d:%02d", status, secs/60, secs%60), s.th.Popup, inner)
+	c.put(x+1, row+3, status+media.FormatDuration(int(elapsed.Seconds())), s.th.Popup, inner)
 
 	bx := x + (w-len(cancelButton))/2
 	c.put(bx, row+4, cancelButton, s.th.PopupInput, inner)

@@ -235,8 +235,12 @@ func (c *Controller) Elapsed() int { return c.elapsed }
 // Revision changes when the track or its playback position is replaced.
 func (c *Controller) Revision() int { return c.revision }
 
+// TrackID identifies the loaded track: it changes whenever a song is
+// opened or stopped, so commands meant for an earlier track can be ignored.
 func (c *Controller) TrackID() int { return c.gen }
 
+// CanSeek reports whether the loaded song supports seeking: it is open,
+// seekable and has a known length.
 func (c *Controller) CanSeek() bool {
 	return c.track != nil && !c.opening && c.info.TotalSeconds > 0 && c.track.Seekable()
 }
@@ -266,6 +270,8 @@ func (c *Controller) Capabilities() (play, pause, next, previous bool) {
 	return
 }
 
+// hasSongs reports whether group (or, when recursive, one of its sub
+// groups) contains a song, whether played or not.
 func hasSongs(group *playlist.Group, recursive bool) bool {
 	if group == nil {
 		return false
@@ -287,25 +293,21 @@ func (c *Controller) Play() {
 	}
 
 	c.playing = true
-	if c.track != nil {
-		if c.paused {
-			c.paused = false
-			c.track.Start()
-			c.status = StatusPlay
-		} else {
-			c.Pause()
-			return
-		}
-		c.changed()
+	switch {
+	case c.track != nil && !c.paused:
+		c.Pause()
 		return
-	}
-	c.allowRepeat = false
-	if c.resumeSong != "" {
+	case c.track != nil:
+		c.paused = false
+		c.track.Start()
+		c.status = StatusPlay
+	case c.resumeSong != "":
+		c.allowRepeat = false
 		c.startResume()
-		c.changed()
-		return
+	default:
+		c.allowRepeat = false
+		c.advance()
 	}
-	c.advance()
 	c.changed()
 }
 
@@ -463,28 +465,40 @@ func (c *Controller) SeekTo(secs int) {
 	}
 }
 
+// seek moves the current song to secs seconds (at least 0).
 func (c *Controller) seek(secs int) {
 	if err := c.track.Seek(max(secs, 0) - c.track.Elapsed()); err != nil {
-		c.listener.Warning(fmt.Sprintf("Couldn't seek: %v", err))
+		c.seekFailed(err)
 	}
 	// Resync the actual position even when the system optimistically moved
 	// its timeline but the decoder rejected the seek.
-	c.revision++
-	c.elapsed = c.track.Elapsed()
-	c.changed()
+	c.positionChanged()
 }
+
+// skipToEndSeconds is how much of the song SkipToEnd leaves to play.
+const skipToEndSeconds = 8
 
 // SkipToEnd jumps to the last seconds of the song.
 func (c *Controller) SkipToEnd() {
 	if c.playing && c.track != nil {
-		if err := c.track.SeekFromEnd(8); err != nil {
-			c.listener.Warning(fmt.Sprintf("Couldn't seek: %v", err))
+		if err := c.track.SeekFromEnd(skipToEndSeconds); err != nil {
+			c.seekFailed(err)
 			return
 		}
-		c.revision++
-		c.elapsed = c.track.Elapsed()
-		c.changed()
+		c.positionChanged()
 	}
+}
+
+func (c *Controller) seekFailed(err error) {
+	c.listener.Warning(fmt.Sprintf("Couldn't seek: %v", err))
+}
+
+// positionChanged publishes a new play position after a seek; the new
+// revision tells system media controls to resync their timeline.
+func (c *Controller) positionChanged() {
+	c.revision++
+	c.elapsed = c.track.Elapsed()
+	c.changed()
 }
 
 // Stop stops playback and resets the playlist.
@@ -566,6 +580,7 @@ func (c *Controller) Shutdown() {
 
 func (c *Controller) changed() { c.listener.Changed() }
 
+// resetNext forgets the precomputed next song.
 func (c *Controller) resetNext() {
 	c.nextSong = -1
 	c.nextName = ""
@@ -797,6 +812,7 @@ func (c *Controller) ForgetGroup(g *playlist.Group) {
 	}
 }
 
+// randN returns a random number in [0, n), or 0 when n <= 0.
 func (c *Controller) randN(n int) int {
 	if n <= 0 {
 		return 0

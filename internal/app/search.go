@@ -98,7 +98,7 @@ func (a *App) searchKey(k keys.Key) {
 }
 
 // selectByPattern marks the entries whose displayed text matches pattern,
-// a shell pattern or (SelectItems.SearchRegex) a regular expression.
+// a shell pattern or (selection.regex) a regular expression.
 func (a *App) selectByPattern(pattern string) {
 	if pattern == "" {
 		a.Warning("No pattern given.")
@@ -130,7 +130,7 @@ func (a *App) selectByPattern(pattern string) {
 }
 
 // patternMatcher compiles a selection pattern according to the
-// SelectItems.* settings.
+// selection.* settings.
 func (a *App) patternMatcher(pattern string) (func(string) bool, error) {
 	fold := a.Opts.SelectCaseInsensitive
 	if a.Opts.SelectRegex {

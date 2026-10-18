@@ -8,25 +8,32 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mingcheng/mp3blstr/internal/keys"
 	"github.com/mingcheng/mp3blstr/internal/media"
 	"go.yaml.in/yaml/v3"
 )
 
-// The sample configuration must parse as shipped and with all settings
-// uncommented, and document the actual defaults.
-func TestSampleConfig(t *testing.T) {
+// readSample returns the sample configuration as shipped and with every
+// setting uncommented.
+func readSample(t *testing.T) (shipped, uncommented string) {
+	t.Helper()
 	raw, err := os.ReadFile("../../config.sample.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Git may check the file out with CRLF line endings (e.g. on Windows).
-	data := strings.ReplaceAll(string(raw), "\r\n", "\n")
+	shipped = strings.ReplaceAll(string(raw), "\r\n", "\n")
+	setting := regexp.MustCompile(`(?m)^(\s*)# (\s*[a-z][a-z0-9_]*:( .*)?)$`)
+	return shipped, setting.ReplaceAllString(shipped, "$1$2")
+}
+
+// The sample configuration must parse as shipped and with all settings
+// uncommented, and document the actual defaults.
+func TestSampleConfig(t *testing.T) {
+	data, all := readSample(t)
 	if err := Default().Parse(strings.NewReader(data)); err != nil {
 		t.Fatalf("as shipped: %v", err)
 	}
-
-	setting := regexp.MustCompile(`(?m)^(\s*)# (\s*[a-z][a-z0-9_]*:( .*)?)$`)
-	all := setting.ReplaceAllString(data, "$1$2")
 	o := Default()
 	if err := o.Parse(strings.NewReader(all)); err != nil {
 		t.Fatalf("uncommented: %v\n%s", err, all)
@@ -50,8 +57,41 @@ func TestSampleConfig(t *testing.T) {
 		o.FadeSeconds != def.FadeSeconds || o.FadeInSeconds != def.FadeInSeconds {
 		t.Errorf("sample values differ from the defaults: %+v", o)
 	}
-	if len(o.Colours) != 18 || len(o.Keys) != 26 {
+	if len(o.Colours) != 18 || len(o.Keys) != 24 {
 		t.Errorf("colours %d, keys %d", len(o.Colours), len(o.Keys))
+	}
+}
+
+// The suggested key bindings of the sample, applied together, must not
+// shadow another command: every command keeps working in every mode it
+// works in with the default bindings.
+func TestSampleKeyBindingsKeepCommandsReachable(t *testing.T) {
+	_, all := readSample(t)
+	o := Default()
+	if err := o.Parse(strings.NewReader(all)); err != nil {
+		t.Fatal(err)
+	}
+	def, custom := keys.Default(), keys.Default()
+	for _, kb := range o.Keys {
+		custom.Bind(kb.Cmd, kb.Key)
+	}
+	reachable := func(tb *keys.Table, m keys.Mode) map[keys.Command]bool {
+		out := map[keys.Command]bool{}
+		for _, group := range tb.Grouped(m, false) {
+			for _, b := range group {
+				out[b.Cmd] = true
+			}
+		}
+		return out
+	}
+	for _, m := range []keys.Mode{keys.ModeNormal, keys.ModeFileSelection, keys.ModeHelp} {
+		got := reachable(custom, m)
+		for cmd := range reachable(def, m) {
+			if !got[cmd] {
+				t.Errorf("mode %d: command %d (key %q by default) is shadowed by the sample bindings",
+					m, cmd, def.KeyFor(cmd).Name())
+			}
+		}
 	}
 }
 

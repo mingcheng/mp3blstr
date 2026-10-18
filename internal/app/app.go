@@ -110,7 +110,7 @@ type App struct {
 	Keys             *keys.Table
 	Matcher          *media.Matcher
 	Mixer            *audio.Mixer // nil when the mixer is disabled
-	fadeMixer        *audio.Mixer // audio gain control also present with --no-mixer
+	fadeMixer        *audio.Mixer // output gains (Deps.FadeMixer, else Mixer); also present with --no-mixer
 	Player           *playback.Controller
 	OnPlaybackChange func()
 
@@ -341,13 +341,19 @@ func (a *App) locatePlaying() {
 		if a.Mode != keys.ModeNormal {
 			return // the file manager adds files to a.Cur: keep it
 		}
-		disp := a.groupView(a.Cur).display
-		a.Cur = g
-		gv := a.groupView(g)
-		gv.display = disp
-		gv.state.Pan = 0
+		a.showGroup(g)
 	}
 	a.groupView(g).state.Set(idx, g.Len())
+}
+
+// showGroup makes g the group on screen. It keeps the display mode of the
+// group shown so far and starts unpanned.
+func (a *App) showGroup(g *playlist.Group) {
+	disp := a.groupView(a.Cur).display
+	a.Cur = g
+	gv := a.groupView(g)
+	gv.display = disp
+	gv.state.Pan = 0
 }
 
 // songIndex returns the index of the song path in g, or -1.
@@ -408,9 +414,9 @@ func (a *App) RestoreSession(path string) {
 		return
 	}
 	a.Player.Resume(a.Opts.LastSong, a.Opts.LastPosition)
-	a.SetMessage(fmt.Sprintf("Press '%s' to continue %s at %d:%02d",
+	a.SetMessage(fmt.Sprintf("Press '%s' to continue %s at %s",
 		strings.TrimSpace(a.Keys.LabelFor(keys.CmdPlayPlay)), media.ChopPath(a.Opts.LastSong),
-		a.Opts.LastPosition/60, a.Opts.LastPosition%60))
+		media.FormatDuration(a.Opts.LastPosition)))
 }
 
 // WriteSession saves the playlist for RestoreSession.
@@ -462,6 +468,8 @@ func (a *App) TickInterval() time.Duration {
 
 // --- main window ------------------------------------------------------------
 
+// groupView returns the view state of g, creating it (with the configured
+// display mode) on first use.
 func (a *App) groupView(g *playlist.Group) *groupView {
 	v, ok := a.views[g]
 	if !ok {
@@ -511,75 +519,96 @@ func (a *App) MainTitle() string {
 func (a *App) MainRow(i int) Row {
 	switch a.Mode {
 	case keys.ModeFileSelection:
-		e := a.fm.Entry(i)
-		if e == nil {
-			return Row{}
-		}
-		r := Row{Text: a.fm.DisplayName(i, a.fmDisplay), Marked: e.Selected()}
-		switch e.Kind {
-		case filemanager.KindDir:
-			r.Kind = RowDir
-		case filemanager.KindAudio:
-			r.Kind = RowSong
-		case filemanager.KindPlaylist:
-			r.Kind = RowPlaylist
-		default:
-			r.Kind = RowOther
-		}
-		return r
+		return a.fileRow(i)
 	case keys.ModeHelp:
 		if i < 0 || i >= len(a.help) {
 			return Row{}
 		}
 		return Row{Text: a.help[i]}
 	default:
-		it := a.Cur.Item(i)
-		if it == nil {
-			return Row{}
-		}
-		r := Row{Text: playlist.DisplayName(it, a.groupView(a.Cur).display), Marked: it.Selected()}
-		switch it.Kind {
-		case playlist.KindGroup:
-			r.Kind = RowGroup
-		case playlist.KindParent:
-			r.Kind = RowParent
-		default:
-			r.Kind = RowSong
-			if !media.IsHTTPStream(it.Path) {
-				switch a.groupView(a.Cur).display {
-				case playlist.DisplayFileName:
-					if info, err := os.Stat(it.Path); err == nil {
-						r.Right = filemanager.SizeDesc(info.Size())
-					}
-				case playlist.DisplayID3:
-					if seconds, ok := a.durations[it.Path]; ok {
-						if seconds >= 0 {
-							r.Right = fmt.Sprintf("%d:%02d", seconds/60, seconds%60)
-							if seconds >= 3600 {
-								r.Right = fmt.Sprintf("%d:%02d:%02d", seconds/3600, seconds%3600/60, seconds%60)
-							}
-						}
-					} else {
-						a.durations[it.Path] = -1
-						a.durationQueue = append(a.durationQueue, it.Path)
-						a.loadNextDuration()
-					}
-				}
-			}
-			if p, _, ok := a.Player.SongInfo(); ok && a.Player.HasSong() && p == it.Path {
-				r.Playing = true
-				if a.Opts.ScrollPlaying {
-					r.Marquee, r.Scroll = true, a.marquee
-					if rest, ok := strings.CutPrefix(r.Text, media.ID3Prefix); ok {
-						r.Prefix, r.Text = media.ID3Prefix, rest
-					}
-				}
-			}
-		}
-		return r
+		return a.playlistRow(i)
 	}
 }
 
+// fileRow returns line i of the file manager.
+func (a *App) fileRow(i int) Row {
+	e := a.fm.Entry(i)
+	if e == nil {
+		return Row{}
+	}
+	r := Row{Text: a.fm.DisplayName(i, a.fmDisplay), Marked: e.Selected()}
+	switch e.Kind {
+	case filemanager.KindDir:
+		r.Kind = RowDir
+	case filemanager.KindAudio:
+		r.Kind = RowSong
+	case filemanager.KindPlaylist:
+		r.Kind = RowPlaylist
+	default:
+		r.Kind = RowOther
+	}
+	return r
+}
+
+// playlistRow returns line i of the group on screen. Songs show their size
+// or length on the right, and the playing song is highlighted (and scrolls
+// when ui.scroll_playing is on).
+func (a *App) playlistRow(i int) Row {
+	it := a.Cur.Item(i)
+	if it == nil {
+		return Row{}
+	}
+	display := a.groupView(a.Cur).display
+	r := Row{Text: playlist.DisplayName(it, display), Marked: it.Selected()}
+	switch it.Kind {
+	case playlist.KindGroup:
+		r.Kind = RowGroup
+		return r
+	case playlist.KindParent:
+		r.Kind = RowParent
+		return r
+	}
+	r.Kind = RowSong
+	r.Right = a.songDetail(it.Path, display)
+	if p, _, ok := a.Player.SongInfo(); ok && a.Player.HasSong() && p == it.Path {
+		r.Playing = true
+		if a.Opts.ScrollPlaying {
+			r.Marquee, r.Scroll = true, a.marquee
+			if rest, ok := strings.CutPrefix(r.Text, media.ID3Prefix); ok {
+				r.Prefix, r.Text = media.ID3Prefix, rest
+			}
+		}
+	}
+	return r
+}
+
+// songDetail is the text right of a song in the playlist: the file size
+// with file names, the length with ID3 names (read in the background, so
+// it is empty until known) and nothing for streams or full paths.
+func (a *App) songDetail(path string, display playlist.DisplayMode) string {
+	if media.IsHTTPStream(path) {
+		return ""
+	}
+	switch display {
+	case playlist.DisplayFileName:
+		if info, err := os.Stat(path); err == nil {
+			return filemanager.SizeDesc(info.Size())
+		}
+	case playlist.DisplayID3:
+		seconds, ok := a.durations[path]
+		if !ok {
+			a.durations[path] = -1 // queued; also marks unreadable files
+			a.durationQueue = append(a.durationQueue, path)
+			a.loadNextDuration()
+		} else if seconds >= 0 {
+			return media.FormatDuration(seconds)
+		}
+	}
+	return ""
+}
+
+// loadNextDuration reads the length of the next queued song on a
+// background goroutine, one song at a time.
 func (a *App) loadNextDuration() {
 	if a.durationBusy || len(a.durationQueue) == 0 {
 		return
@@ -645,17 +674,15 @@ func keyReference(km *keys.Table) []string {
 		out = append(out, "", group[0].Group.String())
 		// The same key and text in several modes is listed once.
 		var merged []keys.Binding
+	next:
 		for _, b := range group {
-			dup := false
 			for i := range merged {
 				if merged[i].Key == b.Key && merged[i].Desc == b.Desc {
 					merged[i].Modes |= b.Modes
-					dup = true
+					continue next
 				}
 			}
-			if !dup {
-				merged = append(merged, b)
-			}
+			merged = append(merged, b)
 		}
 		for _, b := range merged {
 			line := fmt.Sprintf("  %-5s %-20s %s", b.Key.Name(), b.Desc, modeNote(b.Modes))
@@ -665,6 +692,8 @@ func keyReference(km *keys.Table) []string {
 	return out
 }
 
+// modeNote names the modes of a binding in the key reference; bindings
+// valid everywhere get no note.
 func modeNote(m keys.Mode) string {
 	switch m {
 	case keys.ModeNormal:
@@ -683,6 +712,9 @@ func (a *App) Shuffle() bool { return a.Cur.Shuffle }
 // Repeat reports whether the playlist repeats.
 func (a *App) Repeat() bool { return a.Player.Repeat }
 
+// SetRepeat turns repeating on or off; with track set, the current song is
+// repeated instead of the playlist. Repeating cancels quitting at the end
+// of the playlist.
 func (a *App) SetRepeat(enabled, track bool) {
 	a.Player.Repeat = enabled
 	a.Player.RepeatTrack = enabled && track
@@ -693,6 +725,7 @@ func (a *App) SetRepeat(enabled, track bool) {
 	a.playerChanged()
 }
 
+// SetShuffle sets whether the group on screen plays in random order.
 func (a *App) SetShuffle(enabled bool) {
 	a.Cur.Shuffle = enabled
 	a.Player.ResetNextSong()

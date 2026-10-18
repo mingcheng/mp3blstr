@@ -175,3 +175,28 @@ func TestGroupedHelpBar(t *testing.T) {
 		}
 	}
 }
+
+func TestBound(t *testing.T) {
+	tb := Default()
+	for _, tc := range []struct {
+		cmd  Command
+		mode Mode
+		want bool
+	}{
+		{CmdTogglePlaymode, ModeNormal, true},
+		{CmdTogglePlaymode, ModeFileSelection, false},
+		{CmdFileToggleSort, ModeFileSelection, true},
+		{CmdFileToggleSort, ModeNormal, false},
+		{CmdChangeThread, ModeHelp, true},
+		{CmdNone, ModeAny, false},
+	} {
+		if got := tb.Bound(tc.cmd, tc.mode); got != tc.want {
+			t.Errorf("Bound(%d, %d) = %v, want %v", tc.cmd, tc.mode, got, tc.want)
+		}
+	}
+	// A rebound command keeps working in its modes.
+	tb.Bind(CmdTogglePlaymode, Rune('8'))
+	if !tb.Bound(CmdTogglePlaymode, ModeNormal) {
+		t.Fatal("rebinding must keep the command bound")
+	}
+}

@@ -32,6 +32,7 @@ func (c canvas) segs(x, y, width int, parts ...seg) int {
 	return used
 }
 
+// checkbox returns the glyph of a checked or unchecked check box.
 func (s *Screen) checkbox(v bool) string {
 	if v {
 		return s.gl.Checked
@@ -94,16 +95,7 @@ func (s *Screen) drawTime(c canvas, r, y, secs int) {
 	c.put(r+9, y, fmt.Sprintf("%02d", seconds), num, 2)
 }
 
-func fmtTime(secs int) string {
-	if secs < 0 {
-		secs = 0
-	}
-	if secs >= 3600 {
-		return fmt.Sprintf("%d:%02d:%02d", secs/3600, (secs%3600)/60, secs%60)
-	}
-	return fmt.Sprintf("%d:%02d", secs/60, secs%60)
-}
-
+// fmtKHz formats a sample rate in kHz without trailing zeros ("44.1").
 func fmtKHz(hz int) string {
 	return strconv.FormatFloat(float64(hz)/1000, 'f', -1, 64)
 }
@@ -145,9 +137,9 @@ func (s *Screen) drawWidePanel(c canvas, l layout) {
 		return
 	}
 	elapsed, total := p.Elapsed(), info.TotalSeconds
-	c.segs(x, 12, w, seg{fmtTime(elapsed), num}, seg{" / ", def}, seg{fmtTime(total), num})
+	c.segs(x, 12, w, seg{media.FormatDuration(elapsed), num}, seg{" / ", def}, seg{media.FormatDuration(total), num})
 	if total > 0 {
-		rem := "-" + fmtTime(total-elapsed)
+		rem := "-" + media.FormatDuration(total-elapsed)
 		c.put(x+w-len(rem), 12, rem, def, len(rem))
 	}
 	s.drawProgress(c, rect{x, 13, w, 1}, elapsed, total)
@@ -243,6 +235,8 @@ func (s *Screen) drawStatus(c canvas, l layout) {
 	c.put(l.message.x, l.message.y, s.app.Msg.Text, style, l.message.w)
 }
 
+// songTitle is the "artist - title" line of the status area, falling back
+// to the stream title or the file name when the song has no artist tag.
 func songTitle(path string, info media.SongInfo) string {
 	if info.Artist == "" {
 		if info.Title != "" && media.IsHTTPStream(path) {

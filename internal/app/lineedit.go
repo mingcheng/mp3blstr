@@ -33,13 +33,29 @@ func (e *LineEditor) Cursor() int { return e.pos }
 // InsertMode reports whether characters are inserted (or replaced).
 func (e *LineEditor) InsertMode() bool { return e.insert }
 
-// ToggleInsert switches between insert and replace mode.
+// ToggleInsert switches between insert and replace mode and returns the
+// new mode (true for insert).
 func (e *LineEditor) ToggleInsert() bool {
 	e.insert = !e.insert
 	return e.insert
 }
 
-// AddChar inserts or overwrites at the cursor.
+// Fits reports whether n more characters typed at the cursor fit within
+// the length limit: in insert mode they lengthen the text, in replace mode
+// they overwrite it up to its end first.
+func (e *LineEditor) Fits(n int) bool {
+	if e.maxLen <= 0 {
+		return true
+	}
+	newLen := len(e.buf) + n
+	if !e.insert {
+		newLen = max(len(e.buf), e.pos+n)
+	}
+	return newLen <= e.maxLen
+}
+
+// AddChar inserts or overwrites at the cursor. Control characters and
+// characters beyond the length limit are ignored.
 func (e *LineEditor) AddChar(r rune) {
 	if r < ' ' {
 		return
@@ -92,16 +108,8 @@ func (e *LineEditor) Home() { e.pos = 0 }
 // End moves to the end.
 func (e *LineEditor) End() { e.pos = len(e.buf) }
 
-// SetCursor moves the cursor to rune index i.
-func (e *LineEditor) SetCursor(i int) {
-	if i < 0 {
-		i = 0
-	}
-	if i > len(e.buf) {
-		i = len(e.buf)
-	}
-	e.pos = i
-}
+// SetCursor moves the cursor to rune index i, clamped to the text.
+func (e *LineEditor) SetCursor(i int) { e.pos = min(max(i, 0), len(e.buf)) }
 
 // Visible returns the part of the text visible in a field width cells wide,
 // the cursor column within that field and the index of the first visible
@@ -129,4 +137,5 @@ func (e *LineEditor) Visible(width int) (text string, cursorCol, first int) {
 	return string(e.buf[e.scroll:end]), runesWidth(e.buf[e.scroll:e.pos]), e.scroll
 }
 
+// runesWidth returns the number of terminal cells r occupies.
 func runesWidth(r []rune) int { return uniseg.StringWidth(string(r)) }

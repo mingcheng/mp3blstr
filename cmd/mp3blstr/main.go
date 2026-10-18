@@ -147,65 +147,19 @@ func run(args []string) int {
 	})
 	u.Attach(a)
 	if opts.MediaKeys {
-		controls, err := mediakeys.Start(func(command mediakeys.Command) {
-			u.Post(func() {
-				err := handleAppMediaCommand(a, command)
-				if command.Request != nil {
-					command.Request.Result <- err
-				}
-				if err != nil {
-					logger.Warn("media command rejected", "err", err)
-					a.Warning(err.Error())
-				}
-			})
-		}, func(err error) { logger.Warn("Now Playing artwork unavailable", "err", err) })
-		if err != nil {
-			logger.Warn("media keys unavailable", "err", err)
-			a.Warning(fmt.Sprintf("System media controls unavailable: %v", err))
-		} else {
+		if controls := startMediaControls(a, u, logger); controls != nil {
 			defer controls.Close()
-			a.OnPlaybackChange = func() {
-				snapshot := playbackSnapshot(a.Player)
-				snapshot.Shuffle = a.Shuffle()
-				snapshot.Volume = float64(a.Volume()) / 100
-				controls.Update(snapshot)
-			}
-			a.OnPlaybackChange()
 		}
 	}
 	start(a, cli, persist)
-	if mediakeys.SupportsInterruptions && (opts.PauseOnSleep || opts.PauseOnOutputChange) {
-		monitor, err := mediakeys.WatchInterruptions(opts.PauseOnSleep, opts.PauseOnOutputChange, func(event mediakeys.Interruption) {
-			u.Post(func() {
-				if !a.Player.Playing() {
-					return
-				}
-				a.Player.Pause()
-				message := "Paused before system sleep; press Play to continue."
-				if event == mediakeys.OutputChanged {
-					message = "Audio output changed; press Play to continue."
-				}
-				a.SetMessage(message)
-			})
-		})
-		if err != nil {
-			logger.Warn("system interruption monitoring unavailable", "err", err)
-			a.Warning(fmt.Sprintf("Sleep/output auto-pause unavailable: %v", err))
-		} else {
-			defer func() {
-				if err := monitor.Close(); err != nil {
-					logger.Warn("closing system interruption monitor", "err", err)
-				}
-			}()
-		}
+	if monitor := watchInterruptions(a, u, opts, logger); monitor != nil {
+		defer func() {
+			if err := monitor.Close(); err != nil {
+				logger.Warn("closing system interruption monitor", "err", err)
+			}
+		}()
 	}
-
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGHUP)
-	go func() {
-		<-sigs
-		u.Post(a.Quit)
-	}()
+	quitOnSignal(a, u)
 
 	err = u.Run()
 	a.CaptureState()
@@ -219,6 +173,82 @@ func run(args []string) int {
 	return exitOK
 }
 
+// startMediaControls registers the system media controls (MPRIS, Now
+// Playing, media hotkeys) and keeps them updated with the player state. It
+// returns nil, after showing a warning, when they are unavailable.
+func startMediaControls(a *app.App, u *ui.UI, logger *slog.Logger) mediakeys.Controller {
+	controls, err := mediakeys.Start(func(command mediakeys.Command) {
+		u.Post(func() {
+			err := handleAppMediaCommand(a, command)
+			if command.Request != nil {
+				command.Request.Result <- err
+			}
+			if err != nil {
+				logger.Warn("media command rejected", "err", err)
+				a.Warning(err.Error())
+			}
+		})
+	}, func(err error) { logger.Warn("Now Playing artwork unavailable", "err", err) })
+	if err != nil {
+		logger.Warn("media keys unavailable", "err", err)
+		a.Warning(fmt.Sprintf("System media controls unavailable: %v", err))
+		return nil
+	}
+	a.OnPlaybackChange = func() {
+		snapshot := playbackSnapshot(a.Player)
+		snapshot.Shuffle = a.Shuffle()
+		snapshot.Volume = float64(a.Volume()) / 100
+		controls.Update(snapshot)
+	}
+	a.OnPlaybackChange()
+	return controls
+}
+
+// watchInterruptions pauses playback before the system sleeps or when the
+// audio output changes, as configured. It returns nil when there is
+// nothing to watch or watching is unavailable (after showing a warning).
+func watchInterruptions(a *app.App, u *ui.UI, opts *config.Options, logger *slog.Logger) io.Closer {
+	if !mediakeys.SupportsInterruptions || !(opts.PauseOnSleep || opts.PauseOnOutputChange) {
+		return nil
+	}
+	monitor, err := mediakeys.WatchInterruptions(opts.PauseOnSleep, opts.PauseOnOutputChange, func(event mediakeys.Interruption) {
+		u.Post(func() { pauseForInterruption(a, event) })
+	})
+	if err != nil {
+		logger.Warn("system interruption monitoring unavailable", "err", err)
+		a.Warning(fmt.Sprintf("Sleep/output auto-pause unavailable: %v", err))
+		return nil
+	}
+	return monitor
+}
+
+// pauseForInterruption pauses a playing song and tells the user why.
+// Playback is never resumed automatically.
+func pauseForInterruption(a *app.App, event mediakeys.Interruption) {
+	if !a.Player.Playing() {
+		return
+	}
+	a.Player.Pause()
+	message := "Paused before system sleep; press Play to continue."
+	if event == mediakeys.OutputChanged {
+		message = "Audio output changed; press Play to continue."
+	}
+	a.SetMessage(message)
+}
+
+// quitOnSignal quits the program cleanly (saving the session) on SIGTERM
+// and SIGHUP.
+func quitOnSignal(a *app.App, u *ui.UI) {
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGHUP)
+	go func() {
+		<-sigs
+		u.Post(a.Quit)
+	}()
+}
+
+// mediaPlayer is the part of playback.Controller that system media
+// commands use (an interface, so tests can fake it).
 type mediaPlayer interface {
 	Play()
 	Pause()
@@ -233,6 +263,9 @@ type mediaPlayer interface {
 	SeekTo(int)
 }
 
+// handleAppMediaCommand runs a system media command on the UI goroutine.
+// Commands that change application state go through the App; transport
+// commands go to the player. The error is reported back to the system.
 func handleAppMediaCommand(a *app.App, command mediakeys.Command) error {
 	switch command.Action {
 	case mediakeys.SetLoopStatus:
@@ -264,6 +297,7 @@ func handleAppMediaCommand(a *app.App, command mediakeys.Command) error {
 	return nil
 }
 
+// handleMediaCommand runs a transport command (play, pause, seek...).
 func handleMediaCommand(p mediaPlayer, command mediakeys.Command) error {
 	switch command.Action {
 	case mediakeys.PlayPause:
@@ -282,7 +316,7 @@ func handleMediaCommand(p mediaPlayer, command mediakeys.Command) error {
 		p.Stop()
 	case mediakeys.Seek:
 		if command.TrackID != p.TrackID() || !p.CanSeek() {
-			return errors.New("Cannot seek: the track changed or is not seekable.")
+			return errors.New("cannot seek: the track changed or is not seekable")
 		}
 		_, info, _ := p.SongInfo()
 		seconds, err := mediakeys.SeekSeconds(command.Position, info.TotalSeconds)
@@ -294,6 +328,8 @@ func handleMediaCommand(p mediaPlayer, command mediakeys.Command) error {
 	return nil
 }
 
+// playbackSnapshot captures the player state for the system media
+// controls. Songs without a title tag use their file name.
 func playbackSnapshot(p *playback.Controller) mediakeys.Snapshot {
 	path, info, _ := p.SongInfo()
 	if info.Title == "" && path != "" {
@@ -335,6 +371,7 @@ func fail(err error) int {
 	return exitFailure
 }
 
+// printVersion prints the version and build features (--version).
 func printVersion() {
 	fmt.Printf("%s version %s - https://github.com/mingcheng/mp3blstr\n", filepath.Base(os.Args[0]), formatVersion(version, buildDate))
 	fmt.Println("Supported audio formats: MP3 WAV OGG/Vorbis FLAC HTTP-streams")

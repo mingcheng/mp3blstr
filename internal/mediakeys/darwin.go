@@ -138,6 +138,7 @@ type nowPlaying struct {
 
 func Start(post func(Command), report func(error)) (Controller, error) {
 	if post == nil || report == nil {
+		//lint:ignore ST1005 "Now Playing" is the name of the macOS feature.
 		return nil, errors.New("Now Playing requires command and error callbacks")
 	}
 	if !mainLoopRunning.Load() {

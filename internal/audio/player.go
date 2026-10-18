@@ -174,9 +174,16 @@ func (o *Output) Open(path string, opts Options) (*Player, error) {
 	return p, nil
 }
 
+// minFadeFrames is the shortest song (5 seconds, in output frames) that
+// fades in or out; shorter sounds such as jingles play unchanged.
+const minFadeFrames = 5 * int64(OutputRate)
+
+// fadeDurationFrames is the length of the fade out of a song total frames
+// long; songs of unknown length (streams) and songs shorter than the fade
+// don't fade out.
 func fadeDurationFrames(total int64, seconds int) int64 {
 	duration := int64(seconds) * int64(OutputRate)
-	if total < 5*int64(OutputRate) || duration <= 0 || total < duration {
+	if total < minFadeFrames || duration <= 0 || total < duration {
 		return 0
 	}
 	return duration
@@ -186,7 +193,7 @@ func fadeDurationFrames(total int64, seconds int) int64 {
 // (total 0) fade in as well.
 func fadeInFrames(total int64, seconds int) int64 {
 	duration := int64(seconds) * int64(OutputRate)
-	if duration <= 0 || total > 0 && (total < 5*int64(OutputRate) || total < duration) {
+	if duration <= 0 || total > 0 && (total < minFadeFrames || total < duration) {
 		return 0
 	}
 	return duration
@@ -230,6 +237,8 @@ func (p *Player) watch() {
 	}
 }
 
+// playbackError returns the first error that ends playback: an error set
+// earlier, a lost device or an output failure.
 func (p *Player) playbackError() error {
 	if err := p.Err(); err != nil {
 		return err
@@ -249,6 +258,9 @@ func (p *Player) setError(err error) {
 	p.errMu.Unlock()
 }
 
+// setActive marks the player as playing or paused. The shared device is
+// resumed when the first player becomes active and suspended when the last
+// one stops, so an idle player doesn't keep the audio hardware busy.
 func (p *Player) setActive(active bool) {
 	o := p.output
 	o.mu.Lock()
@@ -282,6 +294,8 @@ func (p *Player) Done() <-chan struct{} { return p.done }
 // Info returns information about the song.
 func (p *Player) Info() media.SongInfo { return p.info }
 
+// Seekable reports whether the source supports seeking (files do, http
+// streams don't).
 func (p *Player) Seekable() bool { return p.seekable }
 
 // Start starts (or resumes) playback.
@@ -364,6 +378,7 @@ func (p *Player) Stop() {
 	})
 }
 
+// isClosed reports whether ch is closed, without blocking.
 func isClosed(ch <-chan struct{}) bool {
 	select {
 	case <-ch:

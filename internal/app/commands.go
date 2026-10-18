@@ -101,11 +101,7 @@ func (a *App) Exec(cmd keys.Command) {
 	case keys.CmdToggleScroll:
 		a.Opts.ScrollPlaying = !a.Opts.ScrollPlaying
 		a.marquee = 0
-		if a.Opts.ScrollPlaying {
-			a.SetMessage("Scrolling of the playing song enabled")
-		} else {
-			a.SetMessage("Scrolling of the playing song disabled")
-		}
+		a.SetMessage("Scrolling of the playing song " + enabledText(a.Opts.ScrollPlaying))
 	case keys.CmdToggleFollow:
 		a.Opts.FollowPlaying = !a.Opts.FollowPlaying
 		if a.Opts.FollowPlaying {
@@ -119,11 +115,7 @@ func (a *App) Exec(cmd keys.Command) {
 		a.SetMessage("Theme: " + a.Opts.Theme)
 	case keys.CmdToggleNerdFont:
 		a.Opts.NerdFont = !a.Opts.NerdFont
-		if a.Opts.NerdFont {
-			a.SetMessage("Nerd Font icons enabled")
-		} else {
-			a.SetMessage("Nerd Font icons disabled")
-		}
+		a.SetMessage("Nerd Font icons " + enabledText(a.Opts.NerdFont))
 	case keys.CmdDel:
 		a.deleteItem()
 	case keys.CmdSelect:
@@ -194,11 +186,7 @@ func (a *App) Exec(cmd keys.Command) {
 		if a.fadeMixer != nil {
 			a.fadeMixer.SetFade(a.Opts.FadeOut)
 		}
-		if a.Opts.FadeOut {
-			a.SetMessage("Fade in/out enabled")
-		} else {
-			a.SetMessage("Fade in/out disabled")
-		}
+		a.SetMessage("Fade in/out " + enabledText(a.Opts.FadeOut))
 	case keys.CmdToggleShuffle:
 		a.SetShuffle(!a.Cur.Shuffle)
 	case keys.CmdTogglePlaymode:
@@ -254,6 +242,14 @@ func (a *App) Exec(cmd keys.Command) {
 	default:
 		a.execFileCommand(cmd)
 	}
+}
+
+// enabledText describes the new state of a toggled setting.
+func enabledText(on bool) string {
+	if on {
+		return "enabled"
+	}
+	return "disabled"
 }
 
 // mixerKey handles keys that are not bound to a command, like the original
@@ -314,11 +310,7 @@ func (a *App) enter() {
 	}
 	v := a.MainView()
 	if sub := a.Cur.SubGroup(v.Cursor); sub != nil {
-		disp := a.groupView(a.Cur).display
-		a.Cur = sub
-		gv := a.groupView(sub)
-		gv.display = disp
-		gv.state.Pan = 0
+		a.showGroup(sub)
 		return
 	}
 	if it := a.Cur.Item(v.Cursor); it != nil {

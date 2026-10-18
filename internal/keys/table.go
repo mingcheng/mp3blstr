@@ -23,6 +23,7 @@ var groupNames = [numGroups]string{
 	"Display & Settings", "Navigation", "General",
 }
 
+// String returns the heading of the category on the help screen.
 func (g Group) String() string {
 	if g < numGroups {
 		return groupNames[g]
@@ -149,7 +150,7 @@ func Default() *Table {
 		entry{s(tcell.KeyEnter), CmdEnter, N, "Enter"},
 		entry{s(tcell.KeyEnter), CmdFileEnter, F, "Enter"},
 		entry{s(tcell.KeyUp), CmdUp, A, "Move Scrollbar Up"},
-		entry{s(tcell.KeyDown), CmdDown, A, "Move Scrolbar Down"},
+		entry{s(tcell.KeyDown), CmdDown, A, "Move Scrollbar Down"},
 		entry{s(tcell.KeyPgUp), CmdPrevPage, A, "Previous Page"},
 		entry{s(tcell.KeyPgDn), CmdNextPage, A, "Next Page"},
 		entry{s(tcell.KeyHome), CmdJumpTop, A, "Start Of List"},
@@ -236,6 +237,17 @@ func (t *Table) ForMode(m Mode) []Binding {
 		}
 	}
 	return out
+}
+
+// Bound reports whether some key triggers cmd in mode m, so that a click
+// can run cmd as if that key had been pressed.
+func (t *Table) Bound(cmd Command, m Mode) bool {
+	for _, b := range t.bindings {
+		if b.Cmd == cmd && b.Modes&m != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // effective reports whether b actually triggers its command in one of the

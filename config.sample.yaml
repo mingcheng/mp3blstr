@@ -20,7 +20,7 @@ ui:
   #                          # percentage of the terminal (min. 60 columns),
   #                          # a number of columns, or 0 = terminal width - 12
   #                          # (original behaviour)
-  # display_mode: filename  # playlist: path, filename or id3 (toggle: f)
+  # display_mode: filename   # playlist: path, filename or id3 (toggle: f)
   # wrap_around: true        # moving past the end of a list wraps around
   # scroll_playing: true     # scroll the name of the playing song
   #                          # (toggle: F); [ID3] labels stay in place,
@@ -81,20 +81,21 @@ files:
   # metadata_cache: true     # cache ID3 names and durations under ~/.config/mp3blstr/cache;
   #                          # false disables persistent metadata caching
   # scan_mp3: false
-  # playlist_dir: ~/Music      # default: your Music folder (XDG_MUSIC_DIR); playlists are saved there as .m3u
+  # playlist_dir: ~/Music    # default: your Music folder (XDG_MUSIC_DIR);
+  #                          # playlists are written there as .m3u
   # audio_patterns: ['\.mp[123]$', '\.wav$', '\.ogg$', '\.oga$', '\.flac$', '^https?://']
   # playlist_patterns: ['\.lst$', '\.m3u$', '\.m3u8$']
   # charset_table: /path/to/win2koi.tbl
 
-selection:                   # select/deselect items by pattern (+ and -)
+selection:                   # "Select Some Items" by pattern (S)
   # unselect_first: false
   # regex: false
   # case_insensitive: true
 
 # Session state. On exit mp3blstr writes the settings changed during the
 # session back into this file (theme, nerd_font, wrap_around, scroll_playing,
-# follow_playing, display modes,
-# threads, sort_mode, play_mode, repeat, fade_out, volume, balance and the settings below):
+# follow_playing, display modes, threads, sort_mode, play_mode, repeat,
+# fade_out, volume, balance and the settings below):
 # existing values are updated in place, new ones are added to their
 # section; comments and blank lines are kept. Command line options are not
 # saved. The playlist is kept in ~/.config/mp3blstr/session.lst and
@@ -115,7 +116,8 @@ state:
 # the same key. Commands of the file manager and of playback are grouped in
 # the nested file: and play: sections.
 # Bindings that are handy when F-keys are taken by the terminal emulator
-# (repeat and shuffle already have R and Z):
+# (repeat and shuffle already have R and Z). Uncommented together they
+# don't hide any other command; the play: keys free the digits 1-6.
 keys:
   # add_paths: a             # quote/escape spaces, or drag files into this dialog
   # select_files: "1"
@@ -123,14 +125,12 @@ keys:
   # sort_playlist: o         # name, artist, title, duration, size, shuffle
   # add_group: "2"
   # set_group_title: "5"
-  # toggle_repeat: "6"
-  # toggle_shuffle: "7"
   # toggle_fade_out: v
   # toggle_playmode: "8"
-  # toggle_sort: F
+  # toggle_sort: o           # file manager; o also sorts the playlist
   # change_thread: "#"
   # load_playlist: l
-  # write_playlist: w
+  # write_playlist: W
   # file:
   #   add_files: "1"
   #   inv_selection: "2"

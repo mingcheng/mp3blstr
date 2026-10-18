@@ -96,7 +96,7 @@ func TestPanelNerdControls(t *testing.T) {
 							}
 							if nerd {
 								for col := 0; col < 3; col++ {
-									_, _, style, _ := sim.GetContent(button.x+col, my)
+									_, style, _ := sim.Get(button.x+col, my)
 									if style != s.th.Label.Bold(false) {
 										t.Error("mixer icon must share playback button colours without bold")
 									}

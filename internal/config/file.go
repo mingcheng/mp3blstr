@@ -46,6 +46,8 @@ var colourNames = map[string]bool{
 
 // colourSettings lists the colour settings below ui.colors. Options.Colours
 // uses the same names without underscores ("popupinput.fg").
+// progress_bar, bar_token and shortcut come from the original and are
+// accepted for compatibility, but no theme style uses them.
 var colourSettings = []string{
 	"default.fg", "default.bg", "popup.fg", "popup.bg", "popup_input.fg",
 	"popup_input.bg", "error.fg", "error.bg", "button.fg", "button.bg",
@@ -112,6 +114,7 @@ func parsedKw[T any](dst *T, parse func(string) (T, error)) keyword {
 	}}
 }
 
+// Range checks for numberKw.
 func percent(n int) bool     { return n >= 0 && n <= 100 }
 func nonNegative(n int) bool { return n >= 0 }
 
@@ -391,12 +394,16 @@ func (p *parser) key(v *yaml.Node, path string) error {
 // value v) looks like an unquoted "#rrggbb" colour.
 func hexComment(k, v *yaml.Node) bool {
 	for _, c := range []string{k.LineComment, v.LineComment} {
-		c = strings.TrimSpace(c)
-		if len(c) >= 7 && c[0] == '#' && strings.Trim(c[1:7], "0123456789abcdefABCDEF") == "" {
+		if c = strings.TrimSpace(c); len(c) >= 7 && isHexColour(c[:7]) {
 			return true
 		}
 	}
 	return false
+}
+
+// isHexColour reports whether s is a "#rrggbb" colour.
+func isHexColour(s string) bool {
+	return len(s) == 7 && s[0] == '#' && strings.Trim(s[1:], "0123456789abcdefABCDEF") == ""
 }
 
 // documentRoot returns the top level node of a decoded document, or nil
@@ -422,6 +429,8 @@ func resolve(n *yaml.Node) *yaml.Node {
 	return n
 }
 
+// isNull reports whether n is an explicit or implicit YAML null ("~", "null"
+// or an empty value).
 func isNull(n *yaml.Node) bool {
 	return n.Kind == yaml.ScalarNode && n.ShortTag() == "!!null"
 }
@@ -438,8 +447,7 @@ func checkType(t valueType, v string) error {
 			return fmt.Errorf("bad value type: %q is not a boolean", v)
 		}
 	case typeColour:
-		l := strings.ToLower(v)
-		if !colourNames[l] && !(strings.HasPrefix(l, "#") && len(l) == 7) {
+		if !colourNames[strings.ToLower(v)] && !isHexColour(v) {
 			return fmt.Errorf("bad value type: %q is not a colour", v)
 		}
 	}
