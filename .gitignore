@@ -1,6 +1,42 @@
+# Build and release output
 /bin/
 /dist/
+/mp3blstr
 *.exe
+*.dll
+*.so
+*.dylib
+
+# Test, coverage and profiling artifacts
 *.test
 *.out
+*.prof
+*.pprof
 coverage.*
+
+# Go workspace and vendored dependencies
+go.work
+go.work.sum
+/vendor/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Editors and IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+
+# Temporary files
+*.tmp
+*.log
